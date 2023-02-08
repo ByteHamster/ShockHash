@@ -70,7 +70,7 @@ class TinyBinaryCuckooHashTable {
             assert(numEntries <= 64);
             uint64_t used = 0;
             for (size_t i = 0; i < numEntries; i++) {
-                Union64 hash = getCandidateCells(heap[i]);
+                Union64 hash = getCandidateCells(heap[i].hash, seed, M);
                 used |= (1ul << hash.halves.low) | (1ul << hash.halves.high);
             }
             if (std::popcount(used) != numEntries) {
@@ -80,7 +80,7 @@ class TinyBinaryCuckooHashTable {
             // Filter based on tree/pseudotree
             unionFind.clear();
             for (size_t i = 0; i < numEntries; i++) {
-                Union64 hash = getCandidateCells(heap[i]);
+                Union64 hash = getCandidateCells(heap[i].hash, seed, M);
                 if (!unionFind.unionIsStillPseudoforrest(hash.halves.high, hash.halves.low)) {
                     return false;
                 }
@@ -101,12 +101,11 @@ class TinyBinaryCuckooHashTable {
         }
 
         static inline size_t hashToCell(HashedKey key, size_t seed, size_t range, size_t hashFunctionIndex) {
-            Union64 hash;
-            hash.full = util::remix(key.mhc + seed);
+            Union64 hash = getCandidateCells(key, seed, range);
             if (hashFunctionIndex == 0) {
-                return util::fastrange32(hash.halves.high, range);
+                return hash.halves.high;
             } else {
-                return util::fastrange32(hash.halves.low, range);
+                return hash.halves.low;
             }
         }
 
@@ -119,16 +118,16 @@ class TinyBinaryCuckooHashTable {
             uint64_t full;
         } Union64;
 
-        inline Union64 getCandidateCells(TableEntry &entry) {
+        static inline Union64 getCandidateCells(HashedKey &key, size_t seed, size_t range) {
             Union64 hash;
-            hash.full = util::remix(entry.hash.mhc + seed);
-            hash.halves.high = util::fastrange32(hash.halves.high, M);
-            hash.halves.low = util::fastrange32(hash.halves.low, M);
+            hash.full = util::remix(key.mhc + seed);
+            hash.halves.high = util::fastrange32(hash.halves.high, range/2);
+            hash.halves.low = util::fastrange32(hash.halves.low, (range+1)/2) + range/2;
             return hash;
         }
 
         bool insert(TableEntry *entry) {
-            Union64 candidates = getCandidateCells(*entry);
+            Union64 candidates = getCandidateCells(entry->hash, seed, M);
             entry->candidateCellsXor = candidates.halves.high ^ candidates.halves.low;
             if (cells[candidates.halves.high] == nullptr) {
                 cells[candidates.halves.high] = entry;
