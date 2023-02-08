@@ -5,6 +5,7 @@
 #include "Function.h"
 #include "MurmurHash64.h"
 #include <cstring>
+#include "UnionFind.h"
 
 namespace shockhash {
 struct HashedKey {
@@ -39,23 +40,21 @@ class TinyBinaryCuckooHashTable {
         };
         TableEntry *heap;
         TableEntry** cells;
-        uint8_t *unusedCells;
         size_t N;
         size_t M;
+        UnionFind unionFind;
     private:
         size_t seed = 0;
         size_t numEntries = 0;
     public:
-        explicit TinyBinaryCuckooHashTable(size_t N, size_t M) : N(N), M(M) {
+        explicit TinyBinaryCuckooHashTable(size_t N, size_t M) : N(N), M(M), unionFind(M) {
             heap = new TableEntry[N];
             cells = new TableEntry*[M];
-            unusedCells = new uint8_t[M];
         }
 
         ~TinyBinaryCuckooHashTable() {
             delete[] heap;
             delete[] cells;
-            delete[] unusedCells;
         }
 
         void prepare(HashedKey hash) {
@@ -66,18 +65,28 @@ class TinyBinaryCuckooHashTable {
 
         bool construct(size_t seed_) {
             seed = seed_;
-            memset(unusedCells, 1, M);
-            size_t differentHashes = 0;
+
+            // Filter based on unused cells
+            assert(numEntries <= 64);
+            uint64_t used = 0;
             for (size_t i = 0; i < numEntries; i++) {
                 Union64 hash = getCandidateCells(heap[i]);
-                differentHashes += unusedCells[hash.halves.low];
-                differentHashes += unusedCells[hash.halves.high];
-                unusedCells[hash.halves.low] = 0;
-                unusedCells[hash.halves.high] = 0;
+                used |= (1ul << hash.halves.low) | (1ul << hash.halves.high);
             }
-            if (differentHashes < N) {
+            if (std::popcount(used) != numEntries) {
                 return false;
             }
+
+            // Filter based on tree/pseudotree
+            unionFind.clear();
+            for (size_t i = 0; i < numEntries; i++) {
+                Union64 hash = getCandidateCells(heap[i]);
+                if (!unionFind.unionIsStillPseudoforrest(hash.halves.high, hash.halves.low)) {
+                    return false;
+                }
+            }
+
+            // Actual cuckoo hashing, we know that this will succeed at this point
             memset(cells, 0, M * sizeof(void*)); // Fill with nullpointers
             for (size_t i = 0; i < numEntries; i++) {
                 if (!insert(&heap[i])) {
@@ -144,4 +153,4 @@ class TinyBinaryCuckooHashTable {
             return false;
         }
 };
-} // Namespace sichash
+} // Namespace shockhash
