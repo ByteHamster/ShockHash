@@ -132,7 +132,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 	target_link_libraries(simdrecsplit_correctness PUBLIC SIMDRecSplit BenchmarkUtils)
 
 	add_executable(simdrecsplit_construction benchmark/benchmark_construction.cpp)
-	target_link_libraries(simdrecsplit_construction PUBLIC SIMDRecSplit BenchmarkUtils)
+	target_link_libraries(simdrecsplit_construction PUBLIC SIMDRecSplit BenchmarkUtils ShockHash)
 
 	add_executable(NumHashEvals test/numHashEvals.cpp)
 	target_link_libraries(NumHashEvals PUBLIC BenchmarkUtils)

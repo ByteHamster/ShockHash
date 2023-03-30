@@ -68,7 +68,7 @@ class TinyBinaryCuckooHashTable {
 
             // Filter based on unused cells
             assert(numEntries <= 64);
-            uint64_t used = 0;
+            /*uint64_t used = 0;
             for (size_t i = 0; i < numEntries; i++) {
                 Union64 hash = getCandidateCells(heap[i].hash, seed, M);
                 used |= (1ul << hash.halves.low) | (1ul << hash.halves.high);
@@ -84,7 +84,7 @@ class TinyBinaryCuckooHashTable {
                 if (!unionFind.unionIsStillPseudoforrest(hash.halves.high, hash.halves.low)) {
                     return false;
                 }
-            }
+            }*/
 
             // Actual cuckoo hashing, we know that this will succeed at this point
             memset(cells, 0, M * sizeof(void*)); // Fill with nullpointers
@@ -109,7 +109,6 @@ class TinyBinaryCuckooHashTable {
             }
         }
 
-    private:
         typedef union {
             struct {
                 uint32_t low;
@@ -118,13 +117,15 @@ class TinyBinaryCuckooHashTable {
             uint64_t full;
         } Union64;
 
-        static inline Union64 getCandidateCells(HashedKey &key, size_t seed, size_t range) {
+        static inline Union64 getCandidateCells(const HashedKey key, size_t seed, size_t range) {
             Union64 hash;
             hash.full = util::remix(key.mhc + seed);
             hash.halves.high = util::fastrange32(hash.halves.high, range/2);
             hash.halves.low = util::fastrange32(hash.halves.low, (range+1)/2) + range/2;
             return hash;
         }
+
+    private:
 
         bool insert(TableEntry *entry) {
             Union64 candidates = getCandidateCells(entry->hash, seed, M);

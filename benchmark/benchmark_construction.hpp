@@ -10,6 +10,8 @@
 #include <tlx/cmdline_parser.hpp>
 
 #if defined(SIMD)
+#define SHOCKHASH_ENABLED
+#include <shockhash/ShockHash.h>
 #include <function/SIMDRecSplit.hpp>
 #include <function/PartitionedSIMDRecSplit.h>
 template<size_t LEAF_SIZE>
@@ -123,16 +125,16 @@ int constructAll(int argc, const char* const* argv) {
     if (partitioned) {
         if (leafMethod == "rotations") {
             name = "PartitionedSIMDRecSplit";
-            dispatchLeafSize<PartitionedSimdRecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
+            //dispatchLeafSize<PartitionedSimdRecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
         }
         return 0;
     }
 #endif
 
     if (leafMethod == "bruteforce") {
-        dispatchLeafSize<RecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
+        //dispatchLeafSize<RecSplit, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
     } else if (leafMethod == "rotations") {
-        dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
+        //dispatchLeafSize<RecSplitRotate, bez::function::hash128_t, bez::function::MAX_LEAF_SIZE>(leafSize);
     }
 #ifdef SHOCKHASH_ENABLED
     else if (leafMethod == "cuckoo") {

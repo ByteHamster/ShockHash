@@ -149,7 +149,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
         ShockHash() {}
 
 
-        ShockHash(const vector<string> &keys, const size_t bucket_size) {
+        ShockHash(const vector<string> &keys, const size_t bucket_size, size_t ignore) {
             this->bucket_size = bucket_size;
             this->keys_count = keys.size();
             hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
@@ -160,7 +160,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             free(h);
         }
 
-        ShockHash(vector<hash128_t> &keys, const size_t bucket_size) {
+        ShockHash(vector<hash128_t> &keys, const size_t bucket_size, size_t ignore) {
             this->bucket_size = bucket_size;
             this->keys_count = keys.size();
             hash_gen(&keys[0]);
@@ -270,10 +270,24 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                 for (size_t i = start; i < end; i++) {
                     table.prepare(shockhash::HashedKey(bucket[i]));
                 }
+
+                uint64_t allSet = (1 << m) - 1;
+                uint64_t mask = 0;
                 for (;;) {
+                    for (;;) {
+                        mask = 0;
+                        for (size_t i = start; i < end; i++) {
+                            auto hash = TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m);
+                            mask |= (1ul << hash.halves.low);
+                            mask |= (1ul << hash.halves.high);
+                        }
+                        if (mask == allSet) break;
+                        x++;
+                    }
                     if (table.construct(x)) break;
                     x++;
                 }
+
                 for (size_t i = 0; i < m; i++) {
                     size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(table.cells[i]->hash, x, m, 0);
                     ribbonInput.emplace_back(table.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
