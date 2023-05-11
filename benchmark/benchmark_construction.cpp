@@ -4,7 +4,7 @@
 #include <iostream>
 #include <XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
-#include <shockhash/ShockHash.h>
+#include "ShockHash.h"
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory");
 

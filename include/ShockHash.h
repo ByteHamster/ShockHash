@@ -5,19 +5,6 @@
  * For tiny space usages (~1.6 bit/object), ShockHash is faster than RecSplit.
  */
 
-// Work around a missing "#pragma once" in RecSplit
-#ifndef ALLOW_UNALIGNED_READS
-#include "sux/support/SpookyV2.hpp"
-#endif
-#ifdef SIMD
-#include "../util/SimdUtils.hpp"
-#endif
-#include "sux/util/Vector.hpp"
-#include "sux/function/DoubleEF.hpp"
-#include "sux/function/RiceBitVector.hpp"
-#include "sux/function/RecSplit.hpp"
-#include <SimpleRibbon.h>
-#include "TinyBinaryCuckooHashTable.h"
 #include <array>
 #include <cassert>
 #include <chrono>
@@ -25,6 +12,12 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <sux/util/Vector.hpp>
+#include <sux/function/DoubleEF.hpp>
+#include <sux/function/RiceBitVector.hpp>
+#include <sux/function/RecSplit.hpp>
+#include <SimpleRibbon.h>
+#include "TinyBinaryCuckooHashTable.h"
 
 namespace shockhash {
 using namespace sux;

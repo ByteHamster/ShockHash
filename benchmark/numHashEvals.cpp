@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include "../include/shockhash/TinyBinaryCuckooHashTable.h"
+#include "../include/TinyBinaryCuckooHashTable.h"
 
 static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
 return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
