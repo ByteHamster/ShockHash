@@ -186,7 +186,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
         ShockHash() {}
 
 
-        ShockHash(const vector<string> &keys, const size_t bucket_size, size_t ignore) {
+        ShockHash(const vector<string> &keys, const size_t bucket_size) {
             this->bucket_size = bucket_size;
             this->keys_count = keys.size();
             hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
@@ -197,7 +197,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             free(h);
         }
 
-        ShockHash(vector<hash128_t> &keys, const size_t bucket_size, size_t ignore) {
+        ShockHash(vector<hash128_t> &keys, const size_t bucket_size) {
             this->bucket_size = bucket_size;
             this->keys_count = keys.size();
             hash_gen(&keys[0]);
