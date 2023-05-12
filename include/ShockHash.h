@@ -311,7 +311,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     table.prepare(shockhash::HashedKey(bucket[i]));
                 }
 
-                uint64_t allSet = (1 << m) - 1;
+                uint64_t allSet = (1ul << m) - 1;
 #ifdef SIMD
                 FullVecUi mask;
                 FullVecUq xVec(x, x + 1, x + 2, x + 3);
