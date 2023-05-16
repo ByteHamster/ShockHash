@@ -16,6 +16,7 @@
 #include <sux/function/DoubleEF.hpp>
 #include <sux/function/RiceBitVector.hpp>
 #include <sux/function/RecSplit.hpp>
+#include <vectorclass.h>
 #include <SimpleRibbon.h>
 #include "TinyBinaryCuckooHashTable.h"
 
@@ -31,35 +32,21 @@ static const int MAX_FANOUT = 32;
 static const int MAX_LEAF_SIZE = 50;
 
 #ifdef SIMD
-/**
-  * 32-bit finalizer function in Austin Appleby's MurmurHash3 (https://github.com/aappleby/smhasher).
-  */
-FullVecUi inline remix32(FullVecUi z) {
-    z ^= z >> 16;
-    z *= 0x85ebca6b;
-    z ^= z >> 13;
-    z *= 0xc2b2ae35;
-    z ^= z >> 16;
-    return z;
+using Vec4x64ui = Vec4uq;
+
+/** David Stafford's (http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html)
+ * 13th variant of the 64-bit finalizer function in Austin Appleby's
+ * MurmurHash3 (https://github.com/aappleby/smhasher).
+ */
+Vec4x64ui inline remix(Vec4x64ui z) {
+    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
+    z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
+    return z ^ (z >> 31);
 }
 
-FullVecUi remix(FullVecUq x, FullVecUq y, uint32_t n) {
-    //FullVecUi combined(compress(x >> 32, y >> 32) ^ compress(x, y)); // This is a bit slower than below
-    const FullVecUi xx(x);
-    const FullVecUi yy(y);
-#ifdef SIMDRS_512_BIT
-    FullVecUi combined = blend16<0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30>(xx, yy)
-        ^ blend16<1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31>(xx, yy);
-#else
-    FullVecUi combined = blend8<0, 2, 4, 6, 8, 10, 12, 14>(xx, yy) ^ blend8<1, 3, 5, 7, 9, 11, 13, 15>(xx, yy);
-#endif
-    return remix32(combined);
-}
-
-FullVecUi remap(FullVecUi remixed, uint32_t n) {
-    constexpr int masklen = 16;
-    constexpr uint32_t mask = (uint32_t(1) << masklen) - 1;
-    return ((remixed & mask) * n) >> masklen;
+Vec4x64ui remap32(Vec4x64ui remixed, uint32_t n) {
+    constexpr uint32_t mask = (uint64_t(1) << 32) - 1;
+    return ((remixed & mask) * n) >> 32;
 }
 
 #endif
@@ -215,7 +202,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 
             while (m > upper_aggr) { // fanout = 2
                 const auto d = reader.readNext(golomb_param(m));
-                const size_t hmod = sux::remap16(remix(hash.second + d + start_seed[level]), m);
+                const size_t hmod = sux::remap16(sux::function::remix(hash.second + d + start_seed[level]), m);
 
                 const uint32_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
                 if (hmod < split) {
@@ -229,7 +216,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             }
             if (m > lower_aggr) {
                 const auto d = reader.readNext(golomb_param(m));
-                const size_t hmod = sux::remap16(remix(hash.second + d + start_seed[level]), m);
+                const size_t hmod = sux::remap16(sux::function::remix(hash.second + d + start_seed[level]), m);
 
                 const int part = uint16_t(hmod) / lower_aggr;
                 m = min(lower_aggr, m - part * lower_aggr);
@@ -240,7 +227,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 
             if (m > _leaf) {
                 const auto d = reader.readNext(golomb_param(m));
-                const size_t hmod = sux::remap16(remix(hash.second + d + start_seed[level]), m);
+                const size_t hmod = sux::remap16(sux::function::remix(hash.second + d + start_seed[level]), m);
 
                 const int part = uint16_t(hmod) / _leaf;
                 m = min(_leaf, m - part * _leaf);
@@ -285,16 +272,6 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0);
         }
 
-#ifdef SIMD
-        static FullVecUi powerOfTwo(FullVecUi x) {
-#ifdef SIMDRS_512_BIT
-            return _mm512_sllv_epi32(FullVecUi(1), x);
-#else
-            return _mm256_sllv_epi32(FullVecUi(1), x);
-#endif
-        }
-#endif
-
         void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level) {
             const auto m = end - start;
             assert(m > 1);
@@ -313,29 +290,33 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 
                 uint64_t allSet = (1ul << m) - 1;
 #ifdef SIMD
-                FullVecUi mask;
-                FullVecUq xVec(x, x + 1, x + 2, x + 3);
+                Vec4x64ui mask;
+                Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
                 for (;;) {
                     for (;;) {
                         mask = 0;
                         for (size_t i = start; i < end; i++) {
-                            TinyBinaryCuckooHashTable::Union64 hash;
-                            const FullVecUq first = bucket[i] + xVec;
-                            const FullVecUi remixed = remix(first, first + FULL_VEC_64_COUNT, m);
+                            // Equivalent to TinyBinaryCuckooHashTable::getCandidateCells
+                            const Vec4x64ui remixed = remix(bucket[i] + xVec);
+                            const Vec4x64ui hash1 = remap32(remixed, m / 2);
+                            const Vec4x64ui hash2 = remap32(remixed >> 32, (m + 1) / 2) + m / 2;
+                            mask |= Vec4x64ui(1) << hash1;
+                            mask |= Vec4x64ui(1) << hash2;
 
-                            const FullVecUi hash1 = remap(remixed, m/2); // TODO: This is different to getCandidateCells
-                            const FullVecUi hash2 = remap(remixed >> 16, (m+1)/2) + m/2;
-                            mask |= powerOfTwo(hash1);
-                            mask |= powerOfTwo(hash2);
+                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m).halves.low == hash1.extract(0));
+                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m).halves.high == hash2.extract(0));
+                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x + 1, m).halves.low == hash1.extract(1));
+                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x + 1, m).halves.high == hash2.extract(1));
                         }
                         if (horizontal_or(mask == allSet)) break;
-                        x += FULL_VEC_32_COUNT;
-                        xVec += FULL_VEC_32_COUNT;
+                        x += 8;
+                        xVec += 8;
                     }
                     const auto found_idx = horizontal_find_first(mask == allSet);
-                    x += found_idx;
-                    xVec += found_idx;
-                    if (table.construct(x)) break;
+                    if (table.construct(x + found_idx)) break;
+                    size_t offset = (horizontal_count(mask == allSet) == 1) ? 8 : (found_idx + 1);
+                    x += offset;
+                    xVec += offset;
                 }
 #else
                 uint64_t mask = 0;
@@ -382,7 +363,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     for (;;) {
                         count[0] = 0;
                         for (size_t i = start; i < end; i++) {
-                            count[remap16(remix(bucket[i] + x), m) >= split]++;
+                            count[remap16(sux::function::remix(bucket[i] + x), m) >= split]++;
                         }
                         if (count[0] == split) break;
                         x++;
@@ -391,7 +372,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     count[0] = 0;
                     count[1] = split;
                     for (size_t i = start; i < end; i++) {
-                        temp[count[remap16(remix(bucket[i] + x), m) >= split]++] = bucket[i];
+                        temp[count[remap16(sux::function::remix(bucket[i] + x), m) >= split]++] = bucket[i];
                     }
                     copy(&temp[0], &temp[m], &bucket[start]);
                     x -= start_seed[level];
@@ -410,7 +391,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     for (;;) {
                         memset(count, 0, sizeof count - sizeof *count);
                         for (size_t i = start; i < end; i++) {
-                            count[uint16_t(remap16(remix(bucket[i] + x), m)) / lower_aggr]++;
+                            count[uint16_t(remap16(sux::function::remix(bucket[i] + x), m)) / lower_aggr]++;
                         }
                         size_t broken = 0;
                         for (size_t i = 0; i < fanout - 1; i++) broken |= count[i] - lower_aggr;
@@ -420,7 +401,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 
                     for (size_t i = 0, c = 0; i < fanout; i++, c += lower_aggr) count[i] = c;
                     for (size_t i = start; i < end; i++) {
-                        temp[count[uint16_t(remap16(remix(bucket[i] + x), m)) / lower_aggr]++] = bucket[i];
+                        temp[count[uint16_t(sux::function::remap16(sux::function::remix(bucket[i] + x), m)) / lower_aggr]++] = bucket[i];
                     }
                     copy(&temp[0], &temp[m], &bucket[start]);
 
@@ -443,7 +424,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     for (;;) {
                         memset(count, 0, sizeof count - sizeof *count);
                         for (size_t i = start; i < end; i++) {
-                            count[uint16_t(remap16(remix(bucket[i] + x), m)) / _leaf]++;
+                            count[uint16_t(remap16(sux::function::remix(bucket[i] + x), m)) / _leaf]++;
                         }
                         size_t broken = 0;
                         for (size_t i = 0; i < fanout - 1; i++) broken |= count[i] - _leaf;
@@ -452,7 +433,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     }
                     for (size_t i = 0, c = 0; i < fanout; i++, c += _leaf) count[i] = c;
                     for (size_t i = start; i < end; i++) {
-                        temp[count[uint16_t(remap16(remix(bucket[i] + x), m)) / _leaf]++] = bucket[i];
+                        temp[count[uint16_t(remap16(sux::function::remix(bucket[i] + x), m)) / _leaf]++] = bucket[i];
                     }
                     copy(&temp[0], &temp[m], &bucket[start]);
 

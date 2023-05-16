@@ -118,11 +118,10 @@ class TinyBinaryCuckooHashTable {
         } Union64;
 
         static inline Union64 getCandidateCells(const HashedKey key, size_t seed, size_t range) {
-            Union64 hash;
-            hash.full = util::remix(key.mhc + seed);
-            hash.halves.high = util::fastrange32(hash.halves.high, range/2);
-            hash.halves.low = util::fastrange32(hash.halves.low, (range+1)/2) + range/2;
-            return hash;
+            uint64_t remixed = util::remix(key.mhc + seed);
+            const uint32_t hash1 = util::fastrange32(remixed, range / 2);
+            const uint32_t hash2 = util::fastrange32(remixed >> 32, (range + 1) / 2) + range / 2;
+            return {{hash1, hash2}};
         }
 
     private:
