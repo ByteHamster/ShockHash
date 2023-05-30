@@ -309,8 +309,8 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                             assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x + 1, m).halves.high == hash2.extract(1));
                         }
                         if (horizontal_or(mask == allSet)) break;
-                        x += 8;
-                        xVec += 8;
+                        x += 4;
+                        xVec += 4;
                     }
                     const auto found_idx = horizontal_find_first(mask == allSet);
                     if (table.construct(x + found_idx)) break;
