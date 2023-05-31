@@ -49,6 +49,10 @@ Vec4x64ui remap32(Vec4x64ui remixed, uint32_t n) {
     return ((remixed & mask) * n) >> 32;
 }
 
+Vec4x64ui powerOf2(Vec4x64ui x) {
+    return _mm256_sllv_epi64(Vec4x64ui(1), x);
+}
+
 #endif
 
 #if defined(STATS)
@@ -300,8 +304,8 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                             const Vec4x64ui remixed = remix(bucket[i] + xVec);
                             const Vec4x64ui hash1 = remap32(remixed, m / 2);
                             const Vec4x64ui hash2 = remap32(remixed >> 32, (m + 1) / 2) + m / 2;
-                            mask |= Vec4x64ui(1) << hash1;
-                            mask |= Vec4x64ui(1) << hash2;
+                            mask |= powerOf2(hash1);
+                            mask |= powerOf2(hash2);
 
                             assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m).halves.low == hash1.extract(0));
                             assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m).halves.high == hash2.extract(0));

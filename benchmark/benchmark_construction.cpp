@@ -6,7 +6,7 @@
 #include <tlx/cmdline_parser.hpp>
 #include "ShockHash.h"
 
-#define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory");
+#define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
 
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
