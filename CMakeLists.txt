@@ -26,7 +26,7 @@ endif()
 add_library(ShockHash INTERFACE)
 target_include_directories(ShockHash INTERFACE include)
 target_compile_features(ShockHash INTERFACE cxx_std_20)
-target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon)
+target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon vectorclass)
 
 # ---------------------------- Benchmarks ----------------------------
 if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
