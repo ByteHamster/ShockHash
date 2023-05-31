@@ -41,6 +41,11 @@ void construct() {
     DO_NOT_OPTIMIZE(h);
 
     std::cout << "RESULT"
+              #ifdef SIMD
+              << " method=SIMD"
+              #else
+              << " method=plain"
+              #endif
               << " l=" << leafSize
               << " b=" << bucketSize
               << " N=" << numObjects
