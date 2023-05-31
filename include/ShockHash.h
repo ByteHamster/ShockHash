@@ -16,9 +16,12 @@
 #include <sux/function/DoubleEF.hpp>
 #include <sux/function/RiceBitVector.hpp>
 #include <sux/function/RecSplit.hpp>
-#include <vectorclass.h>
 #include <SimpleRibbon.h>
 #include "TinyBinaryCuckooHashTable.h"
+
+#ifdef SIMD
+#include <vectorclass.h>
+#endif
 
 namespace shockhash {
 using namespace sux;
