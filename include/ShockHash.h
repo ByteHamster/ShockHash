@@ -17,6 +17,7 @@
 #include <sux/function/RiceBitVector.hpp>
 #include <sux/function/RecSplit.hpp>
 #include <SimpleRibbon.h>
+#include <Sorter.hpp>
 #include "TinyBinaryCuckooHashTable.h"
 
 #ifdef SIMD
@@ -483,8 +484,9 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             nbuckets = max(1, (keys_count + bucket_size - 1) / bucket_size);
             auto bucket_size_acc = vector<int64_t>(nbuckets + 1);
             auto bucket_pos_acc = vector<int64_t>(nbuckets + 1);
+            ribbonInput.reserve(keys_count);
 
-            sort(hashes, hashes + keys_count, [this](const hash128_t &a, const hash128_t &b) { return hash128_to_bucket(a) < hash128_to_bucket(b); });
+            sort_hash128_t(hashes, keys_count);
             typename RiceBitVector<AT>::Builder builder;
 
             bucket_size_acc[0] = bucket_pos_acc[0] = 0;

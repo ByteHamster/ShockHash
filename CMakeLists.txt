@@ -30,12 +30,20 @@ if(NOT TARGET ips2ra)
     target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
 endif()
 
+if(NOT TARGET Ips2raShockHashSorter)
+    add_library(Ips2raShockHashSorter SHARED src/Sorter.cpp)
+    target_compile_features(Ips2raShockHashSorter PRIVATE cxx_std_20)
+    target_include_directories(Ips2raShockHashSorter PRIVATE include)
+    target_link_libraries(Ips2raShockHashSorter PUBLIC ips2ra tlx Sux)
+    target_compile_options(Ips2raShockHashSorter PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+endif()
+
 # ---------------------------- Library Setup ----------------------------
 
 add_library(ShockHash INTERFACE)
 target_include_directories(ShockHash INTERFACE include)
 target_compile_features(ShockHash INTERFACE cxx_std_20)
-target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon)
+target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/extlib/cmake-findsse/FindSSE.cmake)
 FindSSE()
