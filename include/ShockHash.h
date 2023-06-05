@@ -56,13 +56,13 @@ Vec4x64ui remap32(Vec4x64ui remixed, uint32_t n) {
 Vec4x64ui powerOf2(Vec4x64ui x) {
     return _mm256_sllv_epi64(Vec4x64ui(1), x);
 }
-
 #endif
 
 #if defined(STATS)
 static uint64_t bij_unary, bij_fixed;
 static uint64_t split_unary, split_fixed;
 static uint64_t time_bij;
+#define MAX_LEVEL_TIME 10
 static uint64_t time_split[MAX_LEVEL_TIME];
 #endif
 
@@ -88,8 +88,8 @@ template <size_t LEAF_SIZE> class SplittingStrategy {
         static_assert(_leaf <= MAX_LEAF_SIZE);
         //static constexpr size_t lower_aggr = _leaf * max(2, ceil(0.35 * _leaf + 1. / 2));
         //static constexpr size_t upper_aggr = lower_aggr * (_leaf < 7 ? 2 : ceil(0.21 * _leaf + 9. / 10));
-        static constexpr size_t upper_aggr = _leaf * 10;
         static constexpr size_t lower_aggr = _leaf * 4;
+        static constexpr size_t upper_aggr = lower_aggr * 3;
 };
 
 // Generates the precomputed table of 32-bit values holding the Golomb-Rice code
@@ -287,7 +287,6 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 
             if (m <= _leaf) {
 #ifdef STATS
-                sum_depths += m * level;
                 auto start_time = high_resolution_clock::now();
 #endif
                 // Begin: difference to RecSplit.
