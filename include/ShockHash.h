@@ -19,9 +19,8 @@
 #include <SimpleRibbon.h>
 #include <Sorter.hpp>
 #include "TinyBinaryCuckooHashTable.h"
-
 #ifdef SIMD
-#include <vectorclass.h>
+#include "SimdUtils.h"
 #endif
 
 namespace shockhash {
@@ -34,29 +33,6 @@ using namespace std::chrono;
 static const int MAX_BUCKET_SIZE = 3000;
 static const int MAX_FANOUT = 32;
 static const int MAX_LEAF_SIZE = 50;
-
-#ifdef SIMD
-using Vec4x64ui = Vec4uq;
-
-/** David Stafford's (http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html)
- * 13th variant of the 64-bit finalizer function in Austin Appleby's
- * MurmurHash3 (https://github.com/aappleby/smhasher).
- */
-Vec4x64ui inline remix(Vec4x64ui z) {
-    z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
-    z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
-    return z ^ (z >> 31);
-}
-
-Vec4x64ui remap32(Vec4x64ui remixed, uint32_t n) {
-    constexpr uint32_t mask = (uint64_t(1) << 32) - 1;
-    return ((remixed & mask) * n) >> 32;
-}
-
-Vec4x64ui powerOf2(Vec4x64ui x) {
-    return _mm256_sllv_epi64(Vec4x64ui(1), x);
-}
-#endif
 
 #if defined(STATS)
 static uint64_t bij_unary, bij_fixed;
@@ -303,17 +279,9 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     for (;;) {
                         mask = 0;
                         for (size_t i = start; i < end; i++) {
-                            // Equivalent to TinyBinaryCuckooHashTable::getCandidateCells
-                            const Vec4x64ui remixed = remix(bucket[i] + xVec);
-                            const Vec4x64ui hash1 = remap32(remixed, m / 2);
-                            const Vec4x64ui hash2 = remap32(remixed >> 32, (m + 1) / 2) + m / 2;
-                            mask |= powerOf2(hash1);
-                            mask |= powerOf2(hash2);
-
-                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m).halves.low == hash1.extract(0));
-                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m).halves.high == hash2.extract(0));
-                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x + 1, m).halves.low == hash1.extract(1));
-                            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x + 1, m).halves.high == hash2.extract(1));
+                            auto hash = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(bucket[i] + xVec, m);
+                            mask |= powerOf2(hash.cell1);
+                            mask |= powerOf2(hash.cell2);
                         }
                         if (horizontal_or(mask == allSet)) break;
                         x += 4;
@@ -332,8 +300,8 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                         mask = 0;
                         for (size_t i = start; i < end; i++) {
                             auto hash = TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m);
-                            mask |= (1ul << hash.halves.low);
-                            mask |= (1ul << hash.halves.high);
+                            mask |= (1ul << hash.cell1);
+                            mask |= (1ul << hash.cell2);
                         }
                         if (mask == allSet) break;
                         x++;

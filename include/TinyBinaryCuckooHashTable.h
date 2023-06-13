@@ -6,6 +6,9 @@
 #include "MurmurHash64.h"
 #include <cstring>
 #include "UnionFind.h"
+#ifdef SIMD
+#include "SimdUtils.h"
+#endif
 
 namespace shockhash {
 struct HashedKey {
@@ -101,43 +104,58 @@ class TinyBinaryCuckooHashTable {
         }
 
         static inline size_t hashToCell(HashedKey key, size_t seed, size_t range, size_t hashFunctionIndex) {
-            Union64 hash = getCandidateCells(key, seed, range);
+            CandidateCells hash = getCandidateCells(key, seed, range);
             if (hashFunctionIndex == 0) {
-                return hash.halves.high;
+                return hash.cell2;
             } else {
-                return hash.halves.low;
+                return hash.cell1;
             }
         }
 
-        typedef union {
-            struct {
-                uint32_t low;
-                uint32_t high;
-            } halves;
-            uint64_t full;
-        } Union64;
+        typedef struct {
+            uint32_t cell1;
+            uint32_t cell2;
+        } CandidateCells;
 
-        static inline Union64 getCandidateCells(const HashedKey key, size_t seed, size_t range) {
+        static inline CandidateCells getCandidateCells(const HashedKey key, size_t seed, size_t range) {
             uint64_t remixed = util::remix(key.mhc + seed);
             const uint32_t hash1 = util::fastrange32(remixed, range / 2);
             const uint32_t hash2 = util::fastrange32(remixed >> 32, (range + 1) / 2) + range / 2;
-            return {{hash1, hash2}};
+            return {hash1, hash2};
         }
+
+#ifdef SIMD
+        typedef struct {
+            Vec4x64ui cell1;
+            Vec4x64ui cell2;
+        } CandidateCellsSIMD;
+
+        static inline CandidateCellsSIMD getCandidateCellsSIMD(Vec4x64ui valueAndSeed, uint64_t range) {
+            const Vec4x64ui remixed = remix(valueAndSeed);
+            const Vec4x64ui hash1 = remap32(remixed, range / 2);
+            const Vec4x64ui hash2 = remap32(remixed >> 32, (range + 1) / 2) + range / 2;
+
+            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(valueAndSeed.extract(0)), 0, range).cell1 == hash1.extract(0));
+            assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(valueAndSeed.extract(0)), 0, range).cell2 == hash2.extract(0));
+
+            return {hash1, hash2};
+        }
+#endif
 
     private:
 
         bool insert(TableEntry *entry) {
-            Union64 candidates = getCandidateCells(entry->hash, seed, M);
-            entry->candidateCellsXor = candidates.halves.high ^ candidates.halves.low;
-            if (cells[candidates.halves.high] == nullptr) {
-                cells[candidates.halves.high] = entry;
+            CandidateCells candidates = getCandidateCells(entry->hash, seed, M);
+            entry->candidateCellsXor = candidates.cell1 ^ candidates.cell2;
+            if (cells[candidates.cell1] == nullptr) {
+                cells[candidates.cell1] = entry;
                 return true;
             }
-            if (cells[candidates.halves.low] == nullptr) {
-                cells[candidates.halves.low] = entry;
+            if (cells[candidates.cell2] == nullptr) {
+                cells[candidates.cell2] = entry;
                 return true;
             }
-            uint32_t currentCell = candidates.halves.low;
+            uint32_t currentCell = candidates.cell1;
 
             size_t tries = 0;
             while (tries < M) {
