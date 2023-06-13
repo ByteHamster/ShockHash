@@ -1,5 +1,3 @@
-#pragma once
-
 #include <chrono>
 #include <iostream>
 #include <XorShift64.h>
@@ -19,7 +17,7 @@ void construct() {
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
     std::cout<<"Generating input data (Seed: "<<seed<<")"<<std::endl;
     util::XorShift64 prng(seed);
-	  std::vector<sux::function::hash128_t> keys;
+	std::vector<sux::function::hash128_t> keys;
     for (size_t i = 0; i < numObjects; i++) {
         keys.push_back(sux::function::hash128_t(prng(), prng()));
     }
@@ -29,6 +27,17 @@ void construct() {
     HashFunc hashFunc(keys, bucketSize);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
+
+    std::cout<<"Testing"<<std::endl;
+    std::vector<bool> taken(keys.size(), false);
+    for (auto key : keys) {
+        size_t hash = hashFunc(key);
+        if (taken[hash]) {
+            std::cerr << "Collision!" << std::endl;
+            exit(1);
+        }
+        taken[hash] = true;
+    }
 
     std::cout<<"Querying"<<std::endl;
     uint64_t h = 0;
