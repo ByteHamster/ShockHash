@@ -288,7 +288,10 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                         xVec += 4;
                     }
                     const auto found_idx = horizontal_find_first(mask == allSet);
-                    if (table.construct(x + found_idx)) break;
+                    if (table.construct(x + found_idx)) {
+                        x += found_idx;
+                        break;
+                    }
                     size_t offset = (horizontal_count(mask == allSet) == 1) ? 8 : (found_idx + 1);
                     x += offset;
                     xVec += offset;
