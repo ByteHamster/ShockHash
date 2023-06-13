@@ -2,7 +2,11 @@
 #include <iostream>
 #include <XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
+#ifdef SIMD
+#include "SIMDShockHash.hpp"
+#else
 #include "ShockHash.h"
+#endif
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
 
@@ -87,6 +91,10 @@ int main(int argc, const char* const* argv) {
         return 1;
     }
 
-    dispatchLeafSize<shockhash::ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
+    #ifdef SIMD
+        dispatchLeafSize<shockhash::SIMDShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
+    #else
+        dispatchLeafSize<shockhash::ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
+    #endif
     return 0;
 }

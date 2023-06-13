@@ -19,9 +19,6 @@
 #include <SimpleRibbon.h>
 #include <Sorter.hpp>
 #include "TinyBinaryCuckooHashTable.h"
-#ifdef SIMD
-#include "SimdUtils.h"
-#endif
 
 namespace shockhash {
 using namespace sux;
@@ -43,9 +40,10 @@ static uint64_t time_split[MAX_LEVEL_TIME];
 #endif
 
 // Starting seed at given distance from the root (extracted at random).
-static const uint64_t start_seed[] = {0x106393c187cae21a, 0x6453cec3f7376937, 0x643e521ddbd2be98, 0x3740c6412f6572cb, 0x717d47562f1ce470, 0x4cd6eb4c63befb7c, 0x9bfd8c5e18c8da73,
+static constexpr uint64_t start_seed[] = {0x106393c187cae21a, 0x6453cec3f7376937, 0x643e521ddbd2be98, 0x3740c6412f6572cb, 0x717d47562f1ce470, 0x4cd6eb4c63befb7c, 0x9bfd8c5e18c8da73,
                                       0x082f20e10092a9a3, 0x2ada2ce68d21defc, 0xe33cb4f3e7c6466b, 0x3980be458c509c59, 0xc466fd9584828e8c, 0x45f0aabe1a61ede6, 0xf6e7b8b33ad9b98d,
                                       0x4ef95e25f4b4983d, 0x81175195173b92d3, 0x4e50927d8dd15978, 0x1ea2099d1fafae7f, 0x425c8a06fbaaa815, 0xcd4216006c74052a};
+static constexpr int NUM_START_SEEDS = sizeof(start_seed) / sizeof(uint64_t);
 
 // Optimal Golomb-Rice parameters for leaves.
 static constexpr uint8_t bij_memo[MAX_LEAF_SIZE + 1] = {
@@ -272,31 +270,6 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                 }
 
                 uint64_t allSet = (1ul << m) - 1;
-#ifdef SIMD
-                Vec4x64ui mask;
-                Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
-                for (;;) {
-                    for (;;) {
-                        mask = 0;
-                        for (size_t i = start; i < end; i++) {
-                            auto hash = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(bucket[i] + xVec, m);
-                            mask |= powerOf2(hash.cell1);
-                            mask |= powerOf2(hash.cell2);
-                        }
-                        if (horizontal_or(mask == allSet)) break;
-                        x += 4;
-                        xVec += 4;
-                    }
-                    const auto found_idx = horizontal_find_first(mask == allSet);
-                    if (table.construct(x + found_idx)) {
-                        x += found_idx;
-                        break;
-                    }
-                    size_t offset = (horizontal_count(mask == allSet) == 1) ? 8 : (found_idx + 1);
-                    x += offset;
-                    xVec += offset;
-                }
-#else
                 uint64_t mask = 0;
                 for (;;) {
                     for (;;) {
@@ -312,7 +285,6 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     if (table.construct(x)) break;
                     x++;
                 }
-#endif
 
                 for (size_t i = 0; i < m; i++) {
                     size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(table.cells[i]->hash, x, m, 0);
