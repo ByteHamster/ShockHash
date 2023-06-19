@@ -93,12 +93,8 @@ uint32_t remix32(uint32_t z) {
     return z;
 }
 
-static FullVecUi powerOfTwo(FullVecUi x) {
-#ifdef SIMDRS_512_BIT
-    return _mm512_sllv_epi32(FullVecUi(1), x);
-#else
-    return _mm256_sllv_epi32(FullVecUi(1), x);
-#endif
+static Vec4x64ui powerOfTwo(Vec4x64ui x) {
+    return _mm256_sllv_epi64(Vec4x64ui(1), x);
 }
 
 // The first 4 entries are 0, then there are the first 4 powers of 256
@@ -373,10 +369,6 @@ class SIMDShockHash {
         return x;
     }
 
-    static FullVecUi rotateRight(FullVecUi val, uint32_t x) {
-        return ((val << uint32_t(LEAF_SIZE - x)) | (val >> x)) & ((1 << LEAF_SIZE) - 1);
-    }
-
     void leafLevel(vector<uint64_t> &bucket, size_t start, size_t m, typename RiceBitVector<AT>::Builder &builder,
             vector<uint32_t> &unary, [[maybe_unused]] const int level) {
         assert(m >= 2);
@@ -388,94 +380,44 @@ class SIMDShockHash {
         sum_depths += m * level;
         auto start_time = high_resolution_clock::now();
 #endif
-        FullVecUi mask;
-        const uint32_t found = (1 << m) - 1;
-#ifdef SIMDRS_512_BIT
-        FullVecUq xVec(SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4, SEED + 5, SEED + 6, SEED + 7);
-        constexpr size_t midstop_threshold = 12;
-#else
-        FullVecUq xVec(SEED, SEED + 1, SEED + 2, SEED + 3);
-        constexpr size_t midstop_threshold = 11;
-#endif
-        if (m < midstop_threshold) {
+
+        // Begin: difference to SIMDRecSplit.
+        shockhash::TinyBinaryCuckooHashTable table(m, m);
+        for (size_t i = start; i < end; i++) {
+            table.prepare(shockhash::HashedKey(bucket[i]));
+        }
+
+        uint64_t allSet = (1ul << m) - 1;
+        Vec4x64ui mask;
+        Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
+        for (;;) {
             for (;;) {
                 mask = 0;
                 for (size_t i = start; i < end; i++) {
-                    const FullVecUq first = bucket[i] + xVec;
-                    const FullVecUi remapped = remap(first, first + FULL_VEC_64_COUNT, m);
-                    mask |= powerOfTwo(remapped);
+                    auto hash = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(bucket[i] + xVec, m);
+                    mask |= powerOfTwo(hash.cell1);
+                    mask |= powerOfTwo(hash.cell2);
                 }
-#ifdef MORESTATS
-                num_bij_evals[m] += m;
-#endif
-                if (horizontal_or(mask == found)) break;
-                x += FULL_VEC_32_COUNT;
-                xVec += FULL_VEC_32_COUNT;
+                if (horizontal_or(mask == allSet)) break;
+                x += 4;
+                xVec += 4;
             }
-            const auto found_idx = horizontal_find_first(mask == found);
-            assert(found_idx != -1);
-            x += found_idx;
-        } else {
-            const uint32_t midstop = m / 2;
-            uint32_t backlog_masks[FULL_VEC_32_COUNT];
-            uint64_t backlog_x[FULL_VEC_32_COUNT];
-            int backlog_size = 0;
-            for (;;) {
-                mask = 0;
-                size_t i;
-                for (i = start; i < start + midstop; i++) {
-                    const FullVecUq first = bucket[i] + xVec;
-                    const FullVecUi remapped = remap(first, first + FULL_VEC_64_COUNT, m);
-                    mask |= powerOfTwo(remapped);
-                }
-#ifdef MORESTATS
-                num_bij_evals[m] += midstop;
-#endif
-                bool brk = false;
-#ifdef SIMDRS_512_BIT_POPCNT
-                FullVecUi popcounts = _mm512_popcnt_epi32(mask);
-                uint32_t bits = to_bits(popcounts == midstop);
-                while (bits != 0) {
-                    uint32_t j = __builtin_ctz(bits); // We don't care for MSVC here since it doesn't define __AVX512VPOPCNTDQ__
-                    bits = clear_rho(bits);
-                    uint32_t interm_mask = mask[j];
-#else
-                uint32_t intermediate[FULL_VEC_32_COUNT];
-                mask.store(intermediate);
-                for (uint32_t j = 0; j < FULL_VEC_32_COUNT; ++j) {
-                    uint32_t interm_mask = intermediate[j];
-                    if (nu(interm_mask) == (int)midstop) {
-#endif
-                        backlog_masks[backlog_size] = interm_mask;
-                        backlog_x[backlog_size] = x + j;
-                        if (++backlog_size == FULL_VEC_32_COUNT) {
-                            FullVecUq first, second;
-                            first.load(backlog_x);
-                            second.load(backlog_x + FULL_VEC_64_COUNT);
-                            FullVecUi backlog_mask;
-                            backlog_mask.load(backlog_masks);
-                            for (; i < end; i++) {
-                                const FullVecUi remapped = remap(first + bucket[i], second + bucket[i], m);
-                                backlog_mask |= powerOfTwo(remapped);
-                            }
-                            if (horizontal_or(backlog_mask == found)) {
-                                brk = true;
-                                const auto found_idx = horizontal_find_first(backlog_mask == found);
-                                assert(found_idx != -1);
-                                x = backlog_x[found_idx];
-                                break;
-                            }
-                            backlog_size = 0;
-                        }
-#ifndef SIMDRS_512_BIT_POPCNT
-                    }
-#endif
-                }
-                if (brk) break;
-                x += FULL_VEC_32_COUNT;
-                xVec += FULL_VEC_32_COUNT;
+            const auto found_idx = horizontal_find_first(mask == allSet);
+            if (table.construct(x + found_idx)) {
+                x += found_idx;
+                break;
             }
+            size_t offset = (horizontal_count(mask == allSet) == 1) ? 8 : (found_idx + 1);
+            x += offset;
+            xVec += offset;
         }
+
+        for (size_t i = 0; i < m; i++) {
+            size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(table.cells[i]->hash, x, m, 0);
+            ribbonInput.emplace_back(table.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+        }
+        // End: difference to SIMDRecSplit.
+
 #ifdef MORESTATS
         time_bij += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
 #endif
@@ -631,10 +573,10 @@ class SIMDShockHash {
         descriptors = builder.build();
         ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
-        // Begin: difference to RecSplit.
+        // Begin: difference to SIMDRecSplit.
         ribbon = new SimpleRibbon<1>(ribbonInput);
         ribbonInput.clear();
-        // End: difference to RecSplit.
+        // End: difference to SIMDRecSplit.
 
 #ifdef STATS
         // Evaluation purposes only
@@ -723,8 +665,13 @@ public:
         }
 
         const auto b = reader.readNext(golomb_param(m));
-        const uint64_t x = hash.second + b + start_seed[NUM_START_SEEDS - 1];
-        return cum_keys + remixAndRemap(x, m);
+
+        // Begin: difference to SIMDRecSplit.
+        shockhash::HashedKey key(hash.second);
+        size_t hashFunctionIndex = ribbon->retrieve(hash.second);
+        return cum_keys + shockhash::TinyBinaryCuckooHashTable::hashToCell(
+                key, b + start_seed[NUM_START_SEEDS - 1], m, hashFunctionIndex);
+        // End: difference to SIMDRecSplit.
     }
 
     /** Returns the value associated with the given key.
