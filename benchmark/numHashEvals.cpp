@@ -93,7 +93,7 @@ void testShockHash(size_t l) {
     size_t totalTries = 0;
     size_t hfEvals = 0;
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
-        shockhash::TinyBinaryCuckooHashTable table(l, l);
+        shockhash::TinyBinaryCuckooHashTable table(l);
         for (size_t i = 0; i < l; i++) {
             table.prepare(shockhash::HashedKey(std::to_string(i) + " " + std::to_string(iteration)));
         }

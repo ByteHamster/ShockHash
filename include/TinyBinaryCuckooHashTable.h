@@ -43,16 +43,15 @@ class TinyBinaryCuckooHashTable {
         };
         TableEntry *heap;
         TableEntry** cells;
-        size_t N;
-        size_t M;
+        const size_t NMax;
         UnionFind unionFind;
     private:
         size_t seed = 0;
         size_t numEntries = 0;
     public:
-        explicit TinyBinaryCuckooHashTable(size_t N, size_t M) : N(N), M(M), unionFind(M) {
-            heap = new TableEntry[N];
-            cells = new TableEntry*[M];
+        explicit TinyBinaryCuckooHashTable(size_t NMax) : NMax(NMax), unionFind(NMax) {
+            heap = new TableEntry[NMax];
+            cells = new TableEntry*[NMax];
         }
 
         ~TinyBinaryCuckooHashTable() {
@@ -60,8 +59,12 @@ class TinyBinaryCuckooHashTable {
             delete[] cells;
         }
 
+        void clear() {
+            numEntries = 0;
+        }
+
         void prepare(HashedKey hash) {
-            assert(numEntries < N);
+            assert(numEntries < NMax);
             heap[numEntries].hash = hash;
             numEntries++;
         }
@@ -90,7 +93,7 @@ class TinyBinaryCuckooHashTable {
             }*/
 
             // Actual cuckoo hashing, we know that this will succeed at this point
-            memset(cells, 0, M * sizeof(void*)); // Fill with nullpointers
+            memset(cells, 0, numEntries * sizeof(void*)); // Fill with nullpointers
             for (size_t i = 0; i < numEntries; i++) {
                 if (!insert(&heap[i])) {
                     return false;
@@ -145,7 +148,7 @@ class TinyBinaryCuckooHashTable {
     private:
 
         bool insert(TableEntry *entry) {
-            CandidateCells candidates = getCandidateCells(entry->hash, seed, M);
+            CandidateCells candidates = getCandidateCells(entry->hash, seed, numEntries);
             entry->candidateCellsXor = candidates.cell1 ^ candidates.cell2;
             if (cells[candidates.cell1] == nullptr) {
                 cells[candidates.cell1] = entry;
@@ -158,7 +161,7 @@ class TinyBinaryCuckooHashTable {
             uint32_t currentCell = candidates.cell1;
 
             size_t tries = 0;
-            while (tries < M) {
+            while (tries < numEntries) {
                 uint32_t alternativeCell = entry->candidateCellsXor ^ currentCell;
                 std::swap(entry, cells[alternativeCell]);
                 if (entry == nullptr) {

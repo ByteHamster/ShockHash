@@ -248,13 +248,16 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
         inline uint64_t hash128_to_bucket(const hash128_t &hash) const { return remap128(hash.first, nbuckets); }
 
         // Computes and stores the splittings and bijections of a bucket.
-        void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary) {
+        void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary,
+                      TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
             const auto m = bucket.size();
             vector<uint64_t> temp(m);
-            recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0);
+            recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0, tinyBinaryCuckooHashTable);
         }
 
-        void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level) {
+        void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end,
+                      typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level,
+                      TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
             const auto m = end - start;
             assert(m > 1);
             uint64_t x = start_seed[level];
@@ -264,9 +267,9 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                 auto start_time = high_resolution_clock::now();
 #endif
                 // Begin: difference to RecSplit.
-                shockhash::TinyBinaryCuckooHashTable table(m, m);
+                tinyBinaryCuckooHashTable.clear();
                 for (size_t i = start; i < end; i++) {
-                    table.prepare(shockhash::HashedKey(bucket[i]));
+                    tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
                 }
 
                 uint64_t allSet = (1ul << m) - 1;
@@ -282,13 +285,13 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                         if (mask == allSet) break;
                         x++;
                     }
-                    if (table.construct(x)) break;
+                    if (tinyBinaryCuckooHashTable.construct(x)) break;
                     x++;
                 }
 
                 for (size_t i = 0; i < m; i++) {
-                    size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(table.cells[i]->hash, x, m, 0);
-                    ribbonInput.emplace_back(table.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+                    size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
+                    ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
                 }
                 // End: difference to RecSplit.
 
@@ -333,8 +336,8 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 #ifdef STATS
                     time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
 #endif
-                    recSplit(bucket, temp, start, start + split, builder, unary, level + 1);
-                    if (m - split > 1) recSplit(bucket, temp, start + split, end, builder, unary, level + 1);
+                    recSplit(bucket, temp, start, start + split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    if (m - split > 1) recSplit(bucket, temp, start + split, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                 } else if (m > lower_aggr) { // 2nd aggregation level
                     const size_t fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
                     size_t count[fanout]; // Note that we never read count[fanout-1]
@@ -365,9 +368,9 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 #endif
                     size_t i;
                     for (i = 0; i < m - lower_aggr; i += lower_aggr) {
-                        recSplit(bucket, temp, start + i, start + i + lower_aggr, builder, unary, level + 1);
+                        recSplit(bucket, temp, start + i, start + i + lower_aggr, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                     }
-                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1);
+                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                 } else { // First aggregation level, m <= lower_aggr
                     const size_t fanout = uint16_t(m + _leaf - 1) / _leaf;
                     size_t count[fanout]; // Note that we never read count[fanout-1]
@@ -397,9 +400,9 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
 #endif
                     size_t i;
                     for (i = 0; i < m - _leaf; i += _leaf) {
-                        recSplit(bucket, temp, start + i, start + i + _leaf, builder, unary, level + 1);
+                        recSplit(bucket, temp, start + i, start + i + _leaf, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                     }
-                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1);
+                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                 }
 #ifdef STATS
                 const auto log2golomb = golomb_param(m);
@@ -426,6 +429,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             nbuckets = max(1, (keys_count + bucket_size - 1) / bucket_size);
             auto bucket_size_acc = vector<int64_t>(nbuckets + 1);
             auto bucket_pos_acc = vector<int64_t>(nbuckets + 1);
+            TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
             ribbonInput.reserve(keys_count);
 
             sort_hash128_t(hashes, keys_count);
@@ -440,7 +444,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                 bucket_size_acc[i + 1] = bucket_size_acc[i] + s;
                 if (bucket.size() > 1) {
                     vector<uint32_t> unary;
-                    recSplit(bucket, builder, unary);
+                    recSplit(bucket, builder, unary, tinyBinaryCuckooHashTable);
                     builder.appendUnaryAll(unary);
                 }
                 bucket_pos_acc[i + 1] = builder.getBits();

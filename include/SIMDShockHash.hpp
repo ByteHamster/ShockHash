@@ -370,7 +370,7 @@ class SIMDShockHash {
     }
 
     void leafLevel(vector<uint64_t> &bucket, size_t start, size_t m, typename RiceBitVector<AT>::Builder &builder,
-            vector<uint32_t> &unary, [[maybe_unused]] const int level) {
+            vector<uint32_t> &unary, [[maybe_unused]] const int level, TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
         assert(m >= 2);
         assert(m <= LEAF_SIZE);
         const auto end = start + m;
@@ -382,9 +382,9 @@ class SIMDShockHash {
 #endif
 
         // Begin: difference to SIMDRecSplit.
-        shockhash::TinyBinaryCuckooHashTable table(m, m);
+        tinyBinaryCuckooHashTable.clear();
         for (size_t i = start; i < end; i++) {
-            table.prepare(shockhash::HashedKey(bucket[i]));
+            tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
         }
 
         uint64_t allSet = (1ul << m) - 1;
@@ -403,7 +403,7 @@ class SIMDShockHash {
                 xVec += 4;
             }
             const auto found_idx = horizontal_find_first(mask == allSet);
-            if (table.construct(x + found_idx)) {
+            if (tinyBinaryCuckooHashTable.construct(x + found_idx)) {
                 x += found_idx;
                 break;
             }
@@ -413,8 +413,8 @@ class SIMDShockHash {
         }
 
         for (size_t i = 0; i < m; i++) {
-            size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(table.cells[i]->hash, x, m, 0);
-            ribbonInput.emplace_back(table.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+            size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
+            ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
         }
         // End: difference to SIMDRecSplit.
 
@@ -443,24 +443,26 @@ class SIMDShockHash {
     }
 
     // Computes and stores the splittings and bijections of a bucket.
-    void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary) {
+    void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary,
+                  TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
         const auto m = bucket.size();
         vector<uint64_t> temp(m);
-        recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0);
+        recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0, tinyBinaryCuckooHashTable);
     }
 
     void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t m,
-            typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level = 0) {
+            typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level,
+            TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
         assert(m > 1);
         if (m <= _leaf) {
-            leafLevel(bucket, start, m, builder, unary, level);
+            leafLevel(bucket, start, m, builder, unary, level, tinyBinaryCuckooHashTable);
         } else {
             [[maybe_unused]] uint64_t x;
             if (m > upper_aggr) { // fanout = 2
                 const size_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
                 x = higherLevel(bucket, temp, start, m, split, builder, unary, level);
-                recSplit(bucket, temp, start, split, builder, unary, level + 1);
-                if (m - split > 1) recSplit(bucket, temp, start + split, m - split, builder, unary, level + 1);
+                recSplit(bucket, temp, start, split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                if (m - split > 1) recSplit(bucket, temp, start + split, m - split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
 #ifdef MORESTATS
                 else
                     sum_depths += level;
@@ -469,9 +471,9 @@ class SIMDShockHash {
                 x = aggrLevel<upper_aggr / lower_aggr, lower_aggr, start_seed[NUM_START_SEEDS - 3]>(bucket, temp, start, m, builder, unary, level);
                 size_t i;
                 for (i = 0; i < m - lower_aggr; i += lower_aggr) {
-                    recSplit(bucket, temp, start + i, lower_aggr, builder, unary, level + 1);
+                    recSplit(bucket, temp, start + i, lower_aggr, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                 }
-                if (m - i > 1) recSplit(bucket, temp, start + i, m - i, builder, unary, level + 1);
+                if (m - i > 1) recSplit(bucket, temp, start + i, m - i, builder, unary, level + 1, tinyBinaryCuckooHashTable);
 #ifdef MORESTATS
                 else
                     sum_depths += level;
@@ -480,9 +482,9 @@ class SIMDShockHash {
                 x = aggrLevel<lower_aggr / _leaf, _leaf, start_seed[NUM_START_SEEDS - 2]>(bucket, temp, start, m, builder, unary, level);
                 size_t i;
                 for (i = 0; i < m - _leaf; i += _leaf) {
-                    leafLevel(bucket, start + i, _leaf, builder, unary, level + 1);
+                    leafLevel(bucket, start + i, _leaf, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                 }
-                if (m - i > 1) leafLevel(bucket, start + i, m - i, builder, unary, level + 1);
+                if (m - i > 1) leafLevel(bucket, start + i, m - i, builder, unary, level + 1, tinyBinaryCuckooHashTable);
 #ifdef MORESTATS
                 else
                     sum_depths += level;
@@ -550,6 +552,7 @@ class SIMDShockHash {
         nbuckets = max(1, (keys_count + bucket_size - 1) / bucket_size);
         auto bucket_size_acc = vector<int64_t>(nbuckets + 1);
         auto bucket_pos_acc = vector<int64_t>(nbuckets + 1);
+        TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
         ribbonInput.reserve(keys_count);
 
         sort_hash128_t(hashes, keys_count);
@@ -564,7 +567,7 @@ class SIMDShockHash {
             bucket_size_acc[i + 1] = bucket_size_acc[i] + s;
             if (bucket.size() > 1) {
                 vector<uint32_t> unary;
-                recSplit(bucket, builder, unary);
+                recSplit(bucket, builder, unary, tinyBinaryCuckooHashTable);
                 builder.appendUnaryAll(unary);
             }
             bucket_pos_acc[i + 1] = builder.getBits();
