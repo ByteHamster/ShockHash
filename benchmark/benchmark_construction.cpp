@@ -53,6 +53,8 @@ void construct() {
             std::chrono::high_resolution_clock::now() - beginQueries).count();
     DO_NOT_OPTIMIZE(h);
 
+    hashFunc.printBits();
+
     std::cout << "RESULT"
               #ifdef SIMD
               << " method=SIMD"

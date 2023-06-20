@@ -141,7 +141,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
         size_t keys_count;
         RiceBitVector<AT> descriptors;
         DoubleEF<AT> ef;
-        SimpleRibbon<1> *ribbon = nullptr;
+        SimpleRibbon<1, 128> *ribbon = nullptr;
         std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
 
     public:
@@ -241,6 +241,13 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
         size_t getBits() {
             return ef.bitCountCumKeys() + ef.bitCountPosition()
                     + descriptors.getBits() + 8 * ribbon->size() + 8 * sizeof(ShockHash);
+        }
+
+        void printBits() {
+            std::cout<<"EF 1:   "<<(double)ef.bitCountCumKeys()/keys_count<<std::endl;
+            std::cout<<"EF 2:   "<<(double)ef.bitCountPosition()/keys_count<<std::endl;
+            std::cout<<"trees:  "<<(double)descriptors.getBits()/keys_count<<std::endl;
+            std::cout<<"ribbon: "<<(double)(8 * ribbon->size())/keys_count<<std::endl;
         }
 
     private:
@@ -454,7 +461,7 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
             // Begin: difference to RecSplit.
-            ribbon = new SimpleRibbon<1>(ribbonInput);
+            ribbon = new SimpleRibbon<1, 128>(ribbonInput);
             ribbonInput.clear();
             // End: difference to RecSplit.
 
