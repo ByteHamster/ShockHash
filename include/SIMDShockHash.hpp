@@ -446,7 +446,7 @@ class SIMDShockHash {
     void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary,
                   TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
         const auto m = bucket.size();
-        vector<uint64_t> temp(m);
+        vector<uint64_t> temp(MAX_BUCKET_SIZE);
         recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0, tinyBinaryCuckooHashTable);
     }
 
