@@ -299,16 +299,16 @@ class ShockHash {
                 if constexpr (ROTATION_FITTING) {
                     uint64_t allSet = (1ul << m) - 1;
                     size_t r = 0;
+                    TinyBinaryCuckooHashTable::CandidateCells candidateCellsCache[LEAF_SIZE];
                     for (;;x++) {
                         shockhash::UnionFind unionFind(m);
                         uint64_t a = 0;
                         uint64_t b = 0;
                         size_t i = 0;
-                        std::vector<shockhash::TinyBinaryCuckooHashTable::CandidateCells> candidateCellsB;
-                        std::vector<shockhash::HashedKey> setB;
                         for (; i < m; i++) {
                             auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
                             auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                            candidateCellsCache[i] = candidateCells;
                             if ((hash.mhc & 1) == 0) {
                                 // Set A
                                 a |= 1ull << candidateCells.cell1;
@@ -320,8 +320,6 @@ class ShockHash {
                                 // Set B, to rotate
                                 b |= 1ull << candidateCells.cell1;
                                 b |= 1ull << candidateCells.cell2;
-                                setB.push_back(hash);
-                                candidateCellsB.push_back(candidateCells);
                             }
                         }
                         if (i != m) {
@@ -333,14 +331,18 @@ class ShockHash {
                                 continue;
                             }
                             auto unionFindCopy = unionFind;
-                            for (i = 0; i < setB.size(); i++) {
-                                auto candidateCells = candidateCellsB.at(i);
+                            for (i = 0; i < m; i++) {
+                                auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
+                                if ((hash.mhc & 1) == 0) {
+                                    continue; // Group A
+                                }
+                                auto candidateCells = candidateCellsCache[i];
                                 if (!unionFindCopy.unionIsStillPseudoforrest(
                                         (candidateCells.cell1 + r) % m, (candidateCells.cell2 + r) % m)) {
                                     break; // Try next rotation
                                 }
                             }
-                            if (i == setB.size()) {
+                            if (i == m) {
                                 // All were still pseudoforrests => Can be solved
                                 goto storeOrientation; // break outer loop
                             }
@@ -349,7 +351,7 @@ class ShockHash {
                     storeOrientation:
                     tinyBinaryCuckooHashTable.clearPlacement();
                     for (size_t i = 0; i < m; i++) {
-                        auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(tinyBinaryCuckooHashTable.heap[i].hash, x, m);
+                        auto candidateCells = candidateCellsCache[i];
                         if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {
                             // Set B
                             candidateCells.cell1 = (candidateCells.cell1 + r) % m;
@@ -360,15 +362,18 @@ class ShockHash {
                     }
                     for (size_t i = 0; i < m; i++) {
                         auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
-                        auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                        size_t cell = i;
                         if ((hash.mhc & 1) == 1) {
                             // Set B
-                            candidateCells.cell1 = (candidateCells.cell1 + r) % m;
+                            cell = (cell - r + m) % m;
                         }
-                        ribbonInput.emplace_back(hash.mhc, i == candidateCells.cell1 ? 0 : 1);
+                        // Use fact that first hash function is < m/2 (see getCandidateCells)
+                        ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
                         #ifndef NDEBUG
+                        auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
                             if ((hash.mhc & 1) == 1) {
                                 // Set B
+                                candidateCells.cell1 = (candidateCells.cell1 + r) % m;
                                 candidateCells.cell2 = (candidateCells.cell2 + r) % m;
                             }
                             assert(i == candidateCells.cell1 || i == candidateCells.cell2);

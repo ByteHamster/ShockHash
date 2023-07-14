@@ -22,7 +22,9 @@ class UnionFind {
         size_t findRepresentative(size_t x) {
             assert(x < n);
             while (parents[x] != x) {
+                //size_t xOld = x;
                 x = parents[x];
+                //parents[xOld] = parents[x]; // Path compression is slower
             }
             return x;
         }
