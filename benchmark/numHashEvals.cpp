@@ -6,7 +6,7 @@
 #include <chrono>
 
 static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
-    return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
+    return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
 }
 
 void testRotationFitting(size_t l) {

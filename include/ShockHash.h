@@ -276,7 +276,7 @@ class ShockHash {
         }
 
         static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
-            return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
+            return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
         }
 
         void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end,
