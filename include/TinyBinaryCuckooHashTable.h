@@ -93,13 +93,17 @@ class TinyBinaryCuckooHashTable {
             }*/
 
             // Actual cuckoo hashing, we know that this will succeed at this point
-            memset(cells, 0, numEntries * sizeof(void*)); // Fill with nullpointers
+            clearPlacement();
             for (size_t i = 0; i < numEntries; i++) {
                 if (!insert(&heap[i])) {
                     return false;
                 }
             }
             return true;
+        }
+
+        void clearPlacement() {
+            memset(cells, 0, numEntries * sizeof(void*)); // Fill with nullpointers
         }
 
         [[nodiscard]] size_t size() const {
@@ -151,10 +155,11 @@ class TinyBinaryCuckooHashTable {
         }
 #endif
 
-    private:
-
         bool insert(TableEntry *entry) {
-            CandidateCells candidates = getCandidateCells(entry->hash, seed, numEntries);
+            return insert(entry, getCandidateCells(entry->hash, seed, numEntries));
+        }
+
+        bool insert(TableEntry *entry, CandidateCells candidates) {
             entry->candidateCellsXor = candidates.cell1 ^ candidates.cell2;
             if (cells[candidates.cell1] == nullptr) {
                 cells[candidates.cell1] = entry;
@@ -167,7 +172,7 @@ class TinyBinaryCuckooHashTable {
             uint32_t currentCell = candidates.cell1;
 
             size_t tries = 0;
-            while (tries < numEntries) {
+            while (tries < 2 * numEntries) {
                 uint32_t alternativeCell = entry->candidateCellsXor ^ currentCell;
                 std::swap(entry, cells[alternativeCell]);
                 if (entry == nullptr) {

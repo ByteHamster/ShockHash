@@ -4,10 +4,9 @@
 #include "../include/TinyBinaryCuckooHashTable.h"
 #include <XorShift64.h>
 #include <chrono>
-#include <bit>
 
 static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
-return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
+    return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
 }
 
 void testRotationFitting(size_t l) {

@@ -126,8 +126,10 @@ template <size_t LEAF_SIZE> static constexpr array<uint32_t, MAX_BUCKET_SIZE> fi
 #define skip_bits(m) (memo[m] & 0xFFFF)
 #define skip_nodes(m) ((memo[m] >> 16) & 0x7FF)
 
-template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALLOC> class ShockHash {
+template <size_t LEAF_SIZE, bool ROTATION_FITTING = false>
+class ShockHash {
         static_assert(LEAF_SIZE <= MAX_LEAF_SIZE);
+        static constexpr AllocType AT = sux::util::AllocType::MALLOC;
         static constexpr size_t _leaf = LEAF_SIZE;
         static constexpr size_t lower_aggr = SplittingStrategy<LEAF_SIZE>::lower_aggr;
         static constexpr size_t upper_aggr = SplittingStrategy<LEAF_SIZE>::upper_aggr;
@@ -223,7 +225,18 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             // Begin: difference to RecSplit.
             shockhash::HashedKey key(hash.second);
             size_t hashFunctionIndex = ribbon->retrieve(hash.second);
-            return cum_keys + shockhash::TinyBinaryCuckooHashTable::hashToCell(key, b + start_seed[level], m, hashFunctionIndex);
+            if constexpr (ROTATION_FITTING) {
+                size_t r = b % LEAF_SIZE;
+                size_t x = b / LEAF_SIZE + start_seed[level];
+                auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x, m);
+                size_t cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
+                if ((key.mhc & 1) == 1) { // Group B, rotate
+                    cell = (cell + r) % m;
+                }
+                return cum_keys + cell;
+            } else {
+                return cum_keys + shockhash::TinyBinaryCuckooHashTable::hashToCell(key, b + start_seed[level], m, hashFunctionIndex);
+            }
             // End: difference to RecSplit.
         }
 
@@ -262,6 +275,10 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
             recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0, tinyBinaryCuckooHashTable);
         }
 
+        static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
+            return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
+        }
+
         void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end,
                       typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level,
                       TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
@@ -279,30 +296,115 @@ template <size_t LEAF_SIZE, sux::util::AllocType AT = sux::util::AllocType::MALL
                     tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
                 }
 
-                uint64_t allSet = (1ul << m) - 1;
-                uint64_t mask = 0;
-                for (;;) {
-                    for (;;) {
-                        mask = 0;
-                        for (size_t i = start; i < end; i++) {
-                            auto hash = TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m);
-                            mask |= (1ul << hash.cell1);
-                            mask |= (1ul << hash.cell2);
+                if constexpr (ROTATION_FITTING) {
+                    uint64_t allSet = (1ul << m) - 1;
+                    size_t r = 0;
+                    for (;;x++) {
+                        shockhash::UnionFind unionFind(m);
+                        uint64_t a = 0;
+                        uint64_t b = 0;
+                        size_t i = 0;
+                        std::vector<shockhash::TinyBinaryCuckooHashTable::CandidateCells> candidateCellsB;
+                        std::vector<shockhash::HashedKey> setB;
+                        for (; i < m; i++) {
+                            auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
+                            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                            if ((hash.mhc & 1) == 0) {
+                                // Set A
+                                a |= 1ull << candidateCells.cell1;
+                                a |= 1ull << candidateCells.cell2;
+                                if (!unionFind.unionIsStillPseudoforrest(candidateCells.cell1, candidateCells.cell2)) {
+                                    break;
+                                }
+                            } else {
+                                // Set B, to rotate
+                                b |= 1ull << candidateCells.cell1;
+                                b |= 1ull << candidateCells.cell2;
+                                setB.push_back(hash);
+                                candidateCellsB.push_back(candidateCells);
+                            }
                         }
-                        if (mask == allSet) break;
+                        if (i != m) {
+                            // Loop was aborted because group A is already not a pseudotree
+                            continue;
+                        }
+                        for (r = 0; r < m; r++) {
+                            if ((a | rotate(m, b, r)) != allSet) {
+                                continue;
+                            }
+                            auto unionFindCopy = unionFind;
+                            for (i = 0; i < setB.size(); i++) {
+                                auto candidateCells = candidateCellsB.at(i);
+                                if (!unionFindCopy.unionIsStillPseudoforrest(
+                                        (candidateCells.cell1 + r) % m, (candidateCells.cell2 + r) % m)) {
+                                    break; // Try next rotation
+                                }
+                            }
+                            if (i == setB.size()) {
+                                // All were still pseudoforrests => Can be solved
+                                goto storeOrientation; // break outer loop
+                            }
+                        }
+                    }
+                    storeOrientation:
+                    tinyBinaryCuckooHashTable.clearPlacement();
+                    for (size_t i = 0; i < m; i++) {
+                        auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(tinyBinaryCuckooHashTable.heap[i].hash, x, m);
+                        if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {
+                            // Set B
+                            candidateCells.cell1 = (candidateCells.cell1 + r) % m;
+                            candidateCells.cell2 = (candidateCells.cell2 + r) % m;
+                        }
+                        bool success = tinyBinaryCuckooHashTable.insert(&tinyBinaryCuckooHashTable.heap[i], candidateCells);
+                        assert(success);
+                    }
+                    for (size_t i = 0; i < m; i++) {
+                        auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
+                        auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                        if ((hash.mhc & 1) == 1) {
+                            // Set B
+                            candidateCells.cell1 = (candidateCells.cell1 + r) % m;
+                        }
+                        ribbonInput.emplace_back(hash.mhc, i == candidateCells.cell1 ? 0 : 1);
+                        #ifndef NDEBUG
+                            if ((hash.mhc & 1) == 1) {
+                                // Set B
+                                candidateCells.cell2 = (candidateCells.cell2 + r) % m;
+                            }
+                            assert(i == candidateCells.cell1 || i == candidateCells.cell2);
+                        #endif
+                    }
+                    x -= start_seed[level];
+                    x = x * LEAF_SIZE + r;
+                } else {
+                    uint64_t allSet = (1ul << m) - 1;
+                    uint64_t mask = 0;
+                    for (;;) {
+                        for (;;) {
+                            mask = 0;
+                            for (size_t i = start; i < end; i++) {
+                                auto hash = TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(bucket[i]), x, m);
+                                mask |= (1ul << hash.cell1);
+                                mask |= (1ul << hash.cell2);
+                            }
+                            if (mask == allSet) break;
+                            x++;
+                        }
+                        if (tinyBinaryCuckooHashTable.construct(x)) break;
                         x++;
                     }
-                    if (tinyBinaryCuckooHashTable.construct(x)) break;
-                    x++;
-                }
-
-                for (size_t i = 0; i < m; i++) {
-                    size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
-                    ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+                    for (size_t i = 0; i < m; i++) {
+                        size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
+                        ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+                        #ifndef NDEBUG
+                            size_t cell2 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 1);
+                            assert(i == cell1 || i == cell2);
+                        #endif
+                    }
+                    x -= start_seed[level];
                 }
                 // End: difference to RecSplit.
 
-                x -= start_seed[level];
                 const auto log2golomb = golomb_param(m);
                 builder.appendFixed(x, log2golomb);
                 unary.push_back(x >> log2golomb);
