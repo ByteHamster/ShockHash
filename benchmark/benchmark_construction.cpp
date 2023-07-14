@@ -48,6 +48,9 @@ void construct() {
         if (taken[hash]) {
             std::cerr << "Collision!" << std::endl;
             exit(1);
+        } else if (hash > numObjects) {
+            std::cerr << "Out of range!" << std::endl;
+            exit(1);
         }
         taken[hash] = true;
     }
