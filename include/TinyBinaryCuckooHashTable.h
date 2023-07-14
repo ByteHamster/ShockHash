@@ -124,6 +124,12 @@ class TinyBinaryCuckooHashTable {
             uint64_t remixed = util::remix(key.mhc + seed);
             const uint32_t hash1 = util::fastrange32(remixed, range / 2);
             const uint32_t hash2 = util::fastrange32(remixed >> 32, (range + 1) / 2) + range / 2;
+            /* // Performance is slightly worse, but produces slightly better hash distribution (0.005 bpk better)
+            const uint32_t hash1 = util::fastrange32(remixed, range);
+            uint32_t hash2 = util::fastrange32(remixed >> 32, range);
+            if (hash1 == hash2) {
+                hash2 = util::fastrange32((remixed >> 32) ^ (remixed & 0xffffffff), range);
+            }*/
             return {hash1, hash2};
         }
 

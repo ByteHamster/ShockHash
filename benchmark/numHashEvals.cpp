@@ -2,6 +2,9 @@
 #include <vector>
 #include <cmath>
 #include "../include/TinyBinaryCuckooHashTable.h"
+#include <XorShift64.h>
+#include <chrono>
+#include <bit>
 
 static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
 return ((val << x) | (val >> (l - x))) & ((1 << l) - 1);
@@ -112,14 +115,90 @@ void testShockHash(size_t l) {
             <<std::endl;
 }
 
+void testShockHashRot(size_t l) {
+    assert(l < 64);
+    bool actuallyRotate = true;
+    size_t numIterations = l <= 30 ? 20000 : (l <= 43 ? 4000 : 1000);
+    size_t totalTries = 0;
+    size_t hfEvals = 0;
+    for (size_t iteration = 0; iteration < numIterations; iteration++) {
+        std::vector<uint64_t> keys;
+        auto time = std::chrono::system_clock::now();
+        long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count() * (iteration + 1);
+        util::XorShift64 prng(seed);
+        shockhash::TinyBinaryCuckooHashTable table(l);
+        for (size_t i = 0; i < l; i++) {
+            keys.push_back(prng());
+            table.prepare(shockhash::HashedKey(keys.at(i)));
+        }
+        totalTries--;
+        hfEvals -= 2 * l;
+        uint64_t allSet = (1ul << l) - 1;
+        bool found = false;
+        mainLoop:while (!found) {
+            totalTries++;
+            hfEvals += 2 * l;
+
+            shockhash::UnionFind unionFind(l);
+            uint64_t a = 0;
+            for (size_t i = 0; i < l/2; i++) {
+                auto candidateCells = shockhash::TinyBinaryCuckooHashTable::getCandidateCells(shockhash::HashedKey(keys.at(i)), totalTries, l);
+                a |= 1ull << candidateCells.cell1;
+                a |= 1ull << candidateCells.cell2;
+                if (!unionFind.unionIsStillPseudoforrest(candidateCells.cell1, candidateCells.cell2)) {
+                    goto mainLoop; // First half does not work, so no reason to try second half
+                }
+            }
+            std::vector<shockhash::TinyBinaryCuckooHashTable::CandidateCells> candidateCellsB(l);
+            uint64_t b = 0;
+            for (size_t i = l/2; i < l; i++) {
+                auto candidateCells = shockhash::TinyBinaryCuckooHashTable::getCandidateCells(shockhash::HashedKey(keys.at(i)), totalTries, l);
+                candidateCellsB.at(i) = candidateCells;
+                b |= 1ull << candidateCells.cell1;
+                b |= 1ull << candidateCells.cell2;
+            }
+            for (size_t r = 0; r < l; r++) {
+                if ((a | rotate(l, b, r)) != allSet) {
+                    continue;
+                }
+                if (!actuallyRotate && r != 0) {
+                    continue;
+                }
+                auto unionFindCopy = unionFind;
+                size_t i = l/2;
+                for (; i < l; i++) {
+                    auto candidateCells = candidateCellsB.at(i);
+                    if (!unionFindCopy.unionIsStillPseudoforrest((candidateCells.cell1 + r) % l, (candidateCells.cell2 + r) % l)) {
+                        break; // Try next rotation
+                    }
+                }
+                if (i == l) {
+                    // All were still pseudoforrests => Can be solved
+                    found = true;
+                    break;
+                }
+            }
+        }
+    }
+    std::cout<<"RESULT"
+             <<" method=cuckooRot"
+             <<" l="<<l
+             <<" hfEvals="<<(double)hfEvals/(double)numIterations
+             <<" tries="<<(double)totalTries / (double)numIterations
+             <<" iterations="<<numIterations
+             <<" spaceEstimate="<<log2((double)totalTries * (double)(actuallyRotate ? l : 1) / (double)numIterations) / l + 1
+             <<std::endl;
+}
+
 int main() {
-    for (size_t l = 2; l <= 20; l++) {
-        if (l <= 25) {
+    for (size_t l = 3; l <= 20; l++) {
+        /*if (l <= 25) {
             testRotationFitting(l);
         }
         if (l <= 22) {
             testBruteForce(l);
-        }
+        }*/
         testShockHash(l);
+        testShockHashRot(l);
     }
 }
