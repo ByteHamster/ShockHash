@@ -301,7 +301,6 @@ class ShockHash {
                     size_t r = 0;
                     TinyBinaryCuckooHashTable::CandidateCells candidateCellsCache[LEAF_SIZE];
                     for (;;x++) {
-                        shockhash::UnionFind unionFind(m);
                         uint64_t a = 0;
                         uint64_t b = 0;
                         size_t i = 0;
@@ -313,53 +312,34 @@ class ShockHash {
                                 // Set A
                                 a |= 1ull << candidateCells.cell1;
                                 a |= 1ull << candidateCells.cell2;
-                                if (!unionFind.unionIsStillPseudoforrest(candidateCells.cell1, candidateCells.cell2)) {
-                                    break;
-                                }
                             } else {
-                                // Set B, to rotate
+                                // Set B
                                 b |= 1ull << candidateCells.cell1;
                                 b |= 1ull << candidateCells.cell2;
                             }
-                        }
-                        if (i != m) {
-                            // Loop was aborted because group A is already not a pseudotree
-                            continue;
                         }
                         for (r = 0; r < m; r++) {
                             if ((a | rotate(m, b, r)) != allSet) {
                                 continue;
                             }
-                            auto unionFindCopy = unionFind;
+                            tinyBinaryCuckooHashTable.clearPlacement();
                             for (i = 0; i < m; i++) {
-                                auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
-                                if ((hash.mhc & 1) == 0) {
-                                    continue; // Group A
-                                }
                                 auto candidateCells = candidateCellsCache[i];
-                                if (!unionFindCopy.unionIsStillPseudoforrest(
-                                        (candidateCells.cell1 + r) % m, (candidateCells.cell2 + r) % m)) {
-                                    break; // Try next rotation
+                                if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {
+                                    // Set B
+                                    candidateCells.cell1 = (candidateCells.cell1 + r) % m;
+                                    candidateCells.cell2 = (candidateCells.cell2 + r) % m;
+                                }
+                                if (!tinyBinaryCuckooHashTable.insert(&tinyBinaryCuckooHashTable.heap[i], candidateCells)) {
+                                    break;
                                 }
                             }
                             if (i == m) {
-                                // All were still pseudoforrests => Can be solved
-                                goto storeOrientation; // break outer loop
+                                goto storeOrientation; // All got inserted, break outer loop
                             }
                         }
                     }
                     storeOrientation:
-                    tinyBinaryCuckooHashTable.clearPlacement();
-                    for (size_t i = 0; i < m; i++) {
-                        auto candidateCells = candidateCellsCache[i];
-                        if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {
-                            // Set B
-                            candidateCells.cell1 = (candidateCells.cell1 + r) % m;
-                            candidateCells.cell2 = (candidateCells.cell2 + r) % m;
-                        }
-                        bool success = tinyBinaryCuckooHashTable.insert(&tinyBinaryCuckooHashTable.heap[i], candidateCells);
-                        assert(success);
-                    }
                     for (size_t i = 0; i < m; i++) {
                         auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
                         size_t cell = i;
@@ -370,7 +350,7 @@ class ShockHash {
                         // Use fact that first hash function is < m/2 (see getCandidateCells)
                         ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
                         #ifndef NDEBUG
-                        auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
                             if ((hash.mhc & 1) == 1) {
                                 // Set B
                                 candidateCells.cell1 = (candidateCells.cell1 + r) % m;
@@ -399,11 +379,11 @@ class ShockHash {
                         x++;
                     }
                     for (size_t i = 0; i < m; i++) {
-                        size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
-                        ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+                        // Use fact that first hash function is < m/2 (see getCandidateCells)
+                        ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, (i < m / 2) ? 0 : 1);
                         #ifndef NDEBUG
-                            size_t cell2 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 1);
-                            assert(i == cell1 || i == cell2);
+                            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(tinyBinaryCuckooHashTable.cells[i]->hash, x, m);
+                            assert(i == candidateCells.cell1 || i == candidateCells.cell2);
                         #endif
                     }
                     x -= start_seed[level];

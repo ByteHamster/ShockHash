@@ -113,9 +113,9 @@ class TinyBinaryCuckooHashTable {
         static inline size_t hashToCell(HashedKey key, size_t seed, size_t range, size_t hashFunctionIndex) {
             CandidateCells hash = getCandidateCells(key, seed, range);
             if (hashFunctionIndex == 0) {
-                return hash.cell2;
-            } else {
                 return hash.cell1;
+            } else {
+                return hash.cell2;
             }
         }
 
