@@ -22,7 +22,7 @@ if(NOT TARGET tlx)
     add_subdirectory(extlib/tlx)
 endif()
 
-if(NOT TARGET ips2ra)
+if(NOT TARGET simpleRibbon)
     set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
     add_subdirectory(extlib/simpleRibbon)
     find_package(TBB)
