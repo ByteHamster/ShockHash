@@ -160,6 +160,7 @@ class TinyBinaryCuckooHashTable {
         }
 
         bool insert(TableEntry *entry, CandidateCells candidates) {
+            TableEntry *origEntry = entry;
             entry->candidateCellsXor = candidates.cell1 ^ candidates.cell2;
             if (cells[candidates.cell1] == nullptr) {
                 cells[candidates.cell1] = entry;
@@ -170,17 +171,16 @@ class TinyBinaryCuckooHashTable {
                 return true;
             }
             uint32_t currentCell = candidates.cell1;
+            uint32_t origCell = currentCell;
 
-            size_t tries = 0;
-            while (tries < 2 * numEntries) {
+            do {
                 uint32_t alternativeCell = entry->candidateCellsXor ^ currentCell;
                 std::swap(entry, cells[alternativeCell]);
                 if (entry == nullptr) {
                     return true;
                 }
                 currentCell = alternativeCell;
-                tries++;
-            }
+            } while (currentCell != origCell || entry != origEntry);
             return false;
         }
 };
