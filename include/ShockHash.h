@@ -225,13 +225,13 @@ class ShockHash {
             // Begin: difference to RecSplit.
             shockhash::HashedKey key(hash.second);
             size_t hashFunctionIndex = ribbon->retrieve(hash.second);
-            if constexpr (ROTATION_FITTING) {
+            if (ROTATION_FITTING && m == LEAF_SIZE) {
                 size_t r = b % LEAF_SIZE;
                 size_t x = b / LEAF_SIZE + start_seed[level];
-                auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x, m);
+                auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x, LEAF_SIZE);
                 size_t cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
                 if ((key.mhc & 1) == 1) { // Group B, rotate
-                    cell = (cell + r) % m;
+                    cell = (cell + r) % LEAF_SIZE;
                 }
                 return cum_keys + cell;
             } else {
@@ -296,17 +296,17 @@ class ShockHash {
                     tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
                 }
 
-                if constexpr (ROTATION_FITTING) {
-                    uint64_t allSet = (1ul << m) - 1;
+                if (ROTATION_FITTING && m == LEAF_SIZE) {
+                    uint64_t allSet = (1ul << LEAF_SIZE) - 1;
                     size_t r = 0;
                     TinyBinaryCuckooHashTable::CandidateCells candidateCellsCache[LEAF_SIZE];
                     for (;;x++) {
                         uint64_t a = 0;
                         uint64_t b = 0;
                         size_t i = 0;
-                        for (; i < m; i++) {
+                        for (; i < LEAF_SIZE; i++) {
                             auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
-                            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, LEAF_SIZE);
                             candidateCellsCache[i] = candidateCells;
                             if ((hash.mhc & 1) == 0) {
                                 // Set A
@@ -318,17 +318,17 @@ class ShockHash {
                                 b |= 1ull << candidateCells.cell2;
                             }
                         }
-                        for (r = 0; r < m; r++) {
-                            if ((a | rotate(m, b, r)) != allSet) {
+                        for (r = 0; r < LEAF_SIZE; r++) {
+                            if ((a | rotate(LEAF_SIZE, b, r)) != allSet) {
                                 continue;
                             }
                             tinyBinaryCuckooHashTable.clearPlacement();
-                            for (i = 0; i < m; i++) {
+                            for (i = 0; i < LEAF_SIZE; i++) {
                                 auto candidateCells = candidateCellsCache[i];
                                 if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {
                                     // Set B
-                                    candidateCells.cell1 = (candidateCells.cell1 + r) % m;
-                                    candidateCells.cell2 = (candidateCells.cell2 + r) % m;
+                                    candidateCells.cell1 = (candidateCells.cell1 + r) % LEAF_SIZE;
+                                    candidateCells.cell2 = (candidateCells.cell2 + r) % LEAF_SIZE;
                                 }
                                 if (!tinyBinaryCuckooHashTable.insert(&tinyBinaryCuckooHashTable.heap[i], candidateCells)) {
                                     break;
