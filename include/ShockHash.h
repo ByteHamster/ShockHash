@@ -297,14 +297,13 @@ class ShockHash {
                 }
 
                 if (ROTATION_FITTING && m == LEAF_SIZE) {
-                    uint64_t allSet = (1ul << LEAF_SIZE) - 1;
+                    constexpr uint64_t allSet = (1ul << LEAF_SIZE) - 1;
                     size_t r = 0;
                     TinyBinaryCuckooHashTable::CandidateCells candidateCellsCache[LEAF_SIZE];
                     for (;;x++) {
                         uint64_t a = 0;
                         uint64_t b = 0;
-                        size_t i = 0;
-                        for (; i < LEAF_SIZE; i++) {
+                        for (size_t i = 0; i < LEAF_SIZE; i++) {
                             auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
                             auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, LEAF_SIZE);
                             candidateCellsCache[i] = candidateCells;
@@ -323,6 +322,7 @@ class ShockHash {
                                 continue;
                             }
                             tinyBinaryCuckooHashTable.clearPlacement();
+                            size_t i = 0;
                             for (i = 0; i < LEAF_SIZE; i++) {
                                 auto candidateCells = candidateCellsCache[i];
                                 if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {

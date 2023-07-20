@@ -5,9 +5,9 @@
 #ifdef SIMD
 #include "SIMDShockHash.hpp"
 template <size_t l>
-using ShockHash = shockhash::SIMDShockHash<l>;
+using ShockHash = shockhash::SIMDShockHash<l, false>;
 template <size_t l>
-using ShockHashRotate = shockhash::SIMDShockHash<l;
+using ShockHashRotate = shockhash::SIMDShockHash<l, true>;
 #else
 #include "ShockHash.h"
 template <size_t l>

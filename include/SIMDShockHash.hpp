@@ -116,7 +116,7 @@ static constexpr array<uint32_t, 4 + MAX_FANOUT + FULL_VEC_32_COUNT> fill_aggr_l
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE>
+template <size_t LEAF_SIZE, bool ROTATION_FITTING = false>
 class SIMDShockHash {
     static_assert(LEAF_SIZE <= MAX_LEAF_SIZE);
     static constexpr AllocType AT = sux::util::AllocType::MALLOC;
@@ -370,6 +370,10 @@ class SIMDShockHash {
         return x;
     }
 
+    static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
+        return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
+    }
+
     void leafLevel(vector<uint64_t> &bucket, size_t start, size_t m, typename RiceBitVector<AT>::Builder &builder,
             vector<uint32_t> &unary, [[maybe_unused]] const int level, TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
         assert(m >= 2);
@@ -388,41 +392,109 @@ class SIMDShockHash {
             tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
         }
 
-        uint64_t allSet = (1ul << m) - 1;
-        Vec4x64ui mask;
-        Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
-        for (;;) {
-            for (;;) {
-                mask = 0;
-                for (size_t i = start; i < end; i++) {
-                    auto hash = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(bucket[i] + xVec, m);
-                    mask |= powerOfTwo(hash.cell1);
-                    mask |= powerOfTwo(hash.cell2);
+        if (ROTATION_FITTING && m == LEAF_SIZE) {
+            constexpr uint64_t allSet = (1ul << LEAF_SIZE) - 1;
+            size_t r = 0;
+            TinyBinaryCuckooHashTable::CandidateCells candidateCellsCache[LEAF_SIZE];
+            for (;;x++) {
+                uint64_t a = 0;
+                uint64_t b = 0;
+                for (size_t i = 0; i < LEAF_SIZE; i++) {
+                    auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
+                    auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, LEAF_SIZE);
+                    candidateCellsCache[i] = candidateCells;
+                    if ((hash.mhc & 1) == 0) {
+                        // Set A
+                        a |= 1ull << candidateCells.cell1;
+                        a |= 1ull << candidateCells.cell2;
+                    } else {
+                        // Set B
+                        b |= 1ull << candidateCells.cell1;
+                        b |= 1ull << candidateCells.cell2;
+                    }
                 }
-                if (horizontal_or(mask == allSet)) break;
-                x += 4;
-                xVec += 4;
+                for (r = 0; r < LEAF_SIZE; r++) {
+                    if ((a | rotate(LEAF_SIZE, b, r)) != allSet) {
+                        continue;
+                    }
+                    tinyBinaryCuckooHashTable.clearPlacement();
+                    size_t i = 0;
+                    for (i = 0; i < LEAF_SIZE; i++) {
+                        auto candidateCells = candidateCellsCache[i];
+                        if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {
+                            // Set B
+                            candidateCells.cell1 = (candidateCells.cell1 + r) % LEAF_SIZE;
+                            candidateCells.cell2 = (candidateCells.cell2 + r) % LEAF_SIZE;
+                        }
+                        if (!tinyBinaryCuckooHashTable.insert(&tinyBinaryCuckooHashTable.heap[i], candidateCells)) {
+                            break;
+                        }
+                    }
+                    if (i == m) {
+                        goto storeOrientation; // All got inserted, break outer loop
+                    }
+                }
             }
-            const auto found_idx = horizontal_find_first(mask == allSet);
-            if (tinyBinaryCuckooHashTable.construct(x + found_idx)) {
-                x += found_idx;
-                break;
+            storeOrientation:
+            for (size_t i = 0; i < m; i++) {
+                auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
+                size_t cell = i;
+                if ((hash.mhc & 1) == 1) {
+                    // Set B
+                    cell = (cell - r + m) % m;
+                }
+                // Use fact that first hash function is < m/2 (see getCandidateCells)
+                ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
+                #ifndef NDEBUG
+                    auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                    if ((hash.mhc & 1) == 1) {
+                        // Set B
+                        candidateCells.cell1 = (candidateCells.cell1 + r) % m;
+                        candidateCells.cell2 = (candidateCells.cell2 + r) % m;
+                    }
+                    assert(i == candidateCells.cell1 || i == candidateCells.cell2);
+                #endif
             }
-            size_t offset = (horizontal_count(mask == allSet) == 1) ? 8 : (found_idx + 1);
-            x += offset;
-            xVec += offset;
-        }
+            x -= SEED;
+            x = x * LEAF_SIZE + r;
+        } else {
+            uint64_t allSet = (1ul << m) - 1;
+            Vec4x64ui mask;
+            Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
+            for (;;) {
+                for (;;) {
+                    mask = 0;
+                    for (size_t i = start; i < end; i++) {
+                        auto hash = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(bucket[i] + xVec, m);
+                        mask |= powerOfTwo(hash.cell1);
+                        mask |= powerOfTwo(hash.cell2);
+                    }
+                    if (horizontal_or(mask == allSet)) break;
+                    x += 4;
+                    xVec += 4;
+                }
+                const auto found_idx = horizontal_find_first(mask == allSet);
+                if (tinyBinaryCuckooHashTable.construct(x + found_idx)) {
+                    x += found_idx;
+                    break;
+                }
+                size_t offset = (horizontal_count(mask == allSet) == 1) ? 8 : (found_idx + 1);
+                x += offset;
+                xVec += offset;
+            }
 
-        for (size_t i = 0; i < m; i++) {
-            size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
-            ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+            for (size_t i = 0; i < m; i++) {
+                size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(
+                        tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
+                ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
+            }
+            x -= SEED;
         }
         // End: difference to SIMDRecSplit.
 
 #ifdef MORESTATS
         time_bij += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
 #endif
-        x -= SEED;
         const auto log2golomb = golomb_param(m);
         builder.appendFixed(x, log2golomb);
         unary.push_back(x >> log2golomb);
@@ -673,8 +745,19 @@ public:
         // Begin: difference to SIMDRecSplit.
         shockhash::HashedKey key(hash.second);
         size_t hashFunctionIndex = ribbon->retrieve(hash.second);
-        return cum_keys + shockhash::TinyBinaryCuckooHashTable::hashToCell(
-                key, b + start_seed[NUM_START_SEEDS - 1], m, hashFunctionIndex);
+        if (ROTATION_FITTING && m == LEAF_SIZE) {
+            size_t r = b % LEAF_SIZE;
+            size_t x = b / LEAF_SIZE + start_seed[NUM_START_SEEDS - 1];
+            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x, LEAF_SIZE);
+            size_t cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
+            if ((key.mhc & 1) == 1) { // Group B, rotate
+                cell = (cell + r) % LEAF_SIZE;
+            }
+            return cum_keys + cell;
+        } else {
+            return cum_keys + shockhash::TinyBinaryCuckooHashTable::hashToCell(
+                    key, b + start_seed[NUM_START_SEEDS - 1], m, hashFunctionIndex);
+        }
         // End: difference to SIMDRecSplit.
     }
 
