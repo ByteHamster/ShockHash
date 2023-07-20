@@ -134,7 +134,7 @@ class SIMDShockHash {
     size_t keys_count;
     RiceBitVector<AT> descriptors;
     DoubleEF<AT> ef;
-    SimpleRibbon<1, 128> *ribbon = nullptr;
+    SimpleRibbon<1, 64> *ribbon = nullptr;
     std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
 
   public:
@@ -663,7 +663,7 @@ class SIMDShockHash {
         ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
         // Begin: difference to SIMDRecSplit.
-        ribbon = new SimpleRibbon<1, 128>(ribbonInput);
+        ribbon = new SimpleRibbon<1, 64>(ribbonInput);
         ribbonInput.clear();
         // End: difference to SIMDRecSplit.
 
