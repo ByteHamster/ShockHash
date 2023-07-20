@@ -399,19 +399,32 @@ class SIMDShockHash {
             for (;;x++) {
                 uint64_t a = 0;
                 uint64_t b = 0;
-                for (size_t i = 0; i < LEAF_SIZE; i++) {
+                size_t i = 0;
+                for (; i + 4 <= LEAF_SIZE; i += 4) {
+                    Vec4x64ui keys;
+                    keys.load(bucket.data() + start + i);
+                    Vec4x64ui keysAndSeed = keys + x;
+                    auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(keysAndSeed, LEAF_SIZE);
+                    Vec4x64ui candidatePowers = powerOfTwo(candidateCells.cell1) | powerOfTwo(candidateCells.cell2);
+                    Vec4x64ui bothCandidates = candidateCells.cell1 | (candidateCells.cell2 << 32);
+                    bothCandidates.store(&candidateCellsCache[i]);
+
+                    uint64_t tmp[4];
+                    candidatePowers.store(tmp);
+                    for (size_t k = 0; k < 4; k++) {
+                        uint64_t isGroupB = (tinyBinaryCuckooHashTable.heap[i + k].hash.mhc & 1) == 0 ? 0ul : ~0ul; // Compiler simplifies to AND,NEG
+                        a |= tmp[k] & (~isGroupB);
+                        b |= tmp[k] & isGroupB;
+                    }
+                }
+                for (; i < LEAF_SIZE; i++) {
                     auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
                     auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, LEAF_SIZE);
                     candidateCellsCache[i] = candidateCells;
-                    if ((hash.mhc & 1) == 0) {
-                        // Set A
-                        a |= 1ull << candidateCells.cell1;
-                        a |= 1ull << candidateCells.cell2;
-                    } else {
-                        // Set B
-                        b |= 1ull << candidateCells.cell1;
-                        b |= 1ull << candidateCells.cell2;
-                    }
+                    uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
+                    uint64_t isGroupB = (hash.mhc & 1) == 0 ? 0ul : ~0ul; // Compiler simplifies to AND,NEG
+                    a |= candidatePowers & (~isGroupB);
+                    b |= candidatePowers & isGroupB;
                 }
                 for (r = 0; r < LEAF_SIZE; r++) {
                     if ((a | rotate(LEAF_SIZE, b, r)) != allSet) {

@@ -307,15 +307,10 @@ class ShockHash {
                             auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
                             auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, LEAF_SIZE);
                             candidateCellsCache[i] = candidateCells;
-                            if ((hash.mhc & 1) == 0) {
-                                // Set A
-                                a |= 1ull << candidateCells.cell1;
-                                a |= 1ull << candidateCells.cell2;
-                            } else {
-                                // Set B
-                                b |= 1ull << candidateCells.cell1;
-                                b |= 1ull << candidateCells.cell2;
-                            }
+                            uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
+                            uint64_t isGroupB = (hash.mhc & 1) == 0 ? 0ul : ~0ul; // Compiler simplifies to AND,NEG
+                            a |= candidatePowers & (~isGroupB);
+                            b |= candidatePowers & isGroupB;
                         }
                         for (r = 0; r < LEAF_SIZE; r++) {
                             if ((a | rotate(LEAF_SIZE, b, r)) != allSet) {
