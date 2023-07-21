@@ -116,13 +116,14 @@ static constexpr array<uint32_t, 4 + MAX_FANOUT + FULL_VEC_32_COUNT> fill_aggr_l
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE, bool ROTATION_FITTING = false, uint64_t GROUP_A_HF_MASK = 0b111ul>
+template <size_t LEAF_SIZE, bool ROTATION_FITTING = false>
 class SIMDShockHash {
     static_assert(LEAF_SIZE <= MAX_LEAF_SIZE);
     static constexpr AllocType AT = sux::util::AllocType::MALLOC;
     static constexpr size_t _leaf = LEAF_SIZE;
     static constexpr size_t lower_aggr = SplittingStrategy<LEAF_SIZE>::lower_aggr;
     static constexpr size_t upper_aggr = SplittingStrategy<LEAF_SIZE>::upper_aggr;
+    static constexpr uint64_t GROUP_A_HF_MASK = (LEAF_SIZE > 32) ? 0b111ul : 0ul;
 
     // For each bucket size, the Golomb-Rice parameter (upper 8 bits) and the number of bits to
     // skip in the fixed part of the tree (lower 24 bits).
