@@ -143,7 +143,8 @@ class ShockHash {
         size_t keys_count;
         RiceBitVector<AT> descriptors;
         DoubleEF<AT> ef;
-        SimpleRibbon<1, (_leaf > 24) ? 128 : 64> *ribbon = nullptr;
+        using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
+        Ribbon *ribbon = nullptr;
         std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
 
     public:
@@ -543,7 +544,7 @@ class ShockHash {
             ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
             // Begin: difference to RecSplit.
-            ribbon = new typeof(ribbon)(ribbonInput);
+            ribbon = new Ribbon(ribbonInput);
             ribbonInput.clear();
             // End: difference to RecSplit.
 

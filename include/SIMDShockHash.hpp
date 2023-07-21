@@ -134,7 +134,8 @@ class SIMDShockHash {
     size_t keys_count;
     RiceBitVector<AT> descriptors;
     DoubleEF<AT> ef;
-    SimpleRibbon<1, (_leaf > 24) ? 128 : 64> *ribbon = nullptr;
+    using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
+    Ribbon *ribbon = nullptr;
     std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
 
   public:
@@ -399,25 +400,7 @@ class SIMDShockHash {
             for (;;x++) {
                 uint64_t a = 0;
                 uint64_t b = 0;
-                size_t i = 0;
-                for (; i + 4 <= LEAF_SIZE; i += 4) {
-                    Vec4x64ui keys;
-                    keys.load(bucket.data() + start + i);
-                    Vec4x64ui keysAndSeed = keys + x;
-                    auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(keysAndSeed, LEAF_SIZE);
-                    Vec4x64ui candidatePowers = powerOfTwo(candidateCells.cell1) | powerOfTwo(candidateCells.cell2);
-                    Vec4x64ui bothCandidates = candidateCells.cell1 | (candidateCells.cell2 << 32);
-                    bothCandidates.store(&candidateCellsCache[i]);
-
-                    uint64_t tmp[4];
-                    candidatePowers.store(tmp);
-                    for (size_t k = 0; k < 4; k++) {
-                        uint64_t isGroupB = (tinyBinaryCuckooHashTable.heap[i + k].hash.mhc & 1) == 0 ? 0ul : ~0ul; // Compiler simplifies to AND,NEG
-                        a |= tmp[k] & (~isGroupB);
-                        b |= tmp[k] & isGroupB;
-                    }
-                }
-                for (; i < LEAF_SIZE; i++) {
+                for (size_t i = 0; i < LEAF_SIZE; i++) {
                     auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
                     auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, LEAF_SIZE);
                     candidateCellsCache[i] = candidateCells;
@@ -471,7 +454,7 @@ class SIMDShockHash {
             x -= SEED;
             x = x * LEAF_SIZE + r;
         } else {
-            uint64_t allSet = (1ul << m) - 1;
+            Vec4x64ui allSet = (1ul << m) - 1;
             Vec4x64ui mask;
             Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
             for (;;) {
@@ -663,7 +646,7 @@ class SIMDShockHash {
         ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
         // Begin: difference to SIMDRecSplit.
-        ribbon = new typeof(ribbon)(ribbonInput);
+        ribbon = new Ribbon(ribbonInput);
         ribbonInput.clear();
         // End: difference to SIMDRecSplit.
 
