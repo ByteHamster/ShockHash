@@ -116,7 +116,7 @@ static constexpr array<uint32_t, 4 + MAX_FANOUT + FULL_VEC_32_COUNT> fill_aggr_l
  * @tparam AT a type of memory allocation out of sux::util::AllocType.
  */
 
-template <size_t LEAF_SIZE, bool ROTATION_FITTING = false>
+template <size_t LEAF_SIZE, bool ROTATION_FITTING = false, uint64_t GROUP_A_HF_MASK = 0b111ul>
 class SIMDShockHash {
     static_assert(LEAF_SIZE <= MAX_LEAF_SIZE);
     static constexpr AllocType AT = sux::util::AllocType::MALLOC;
@@ -388,26 +388,45 @@ class SIMDShockHash {
 #endif
 
         // Begin: difference to SIMDRecSplit.
-        tinyBinaryCuckooHashTable.clear();
-        for (size_t i = start; i < end; i++) {
-            tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
-        }
-
         if (ROTATION_FITTING && m == LEAF_SIZE) {
             constexpr uint64_t allSet = (1ul << LEAF_SIZE) - 1;
             size_t r = 0;
+            size_t keysGroupA = 0;
+            size_t indexB = LEAF_SIZE - 1;
+            shockhash::HashedKey keys[LEAF_SIZE];
             TinyBinaryCuckooHashTable::CandidateCells candidateCellsCache[LEAF_SIZE];
+            tinyBinaryCuckooHashTable.clear();
+            for (size_t i = 0; i < LEAF_SIZE; i++) {
+                auto key = shockhash::HashedKey(bucket[i + start]);
+                if ((key.mhc & 1) == 0) {
+                    keys[keysGroupA] = key;
+                    keysGroupA++;
+                } else {
+                    keys[indexB] = key;
+                    indexB--;
+                }
+            }
+            for (size_t i = 0; i < LEAF_SIZE; i++) {
+                tinyBinaryCuckooHashTable.prepare(keys[i]);
+            }
+            uint64_t a = 0;
+            uint64_t b = 0;
             for (;;x++) {
-                uint64_t a = 0;
-                uint64_t b = 0;
-                for (size_t i = 0; i < LEAF_SIZE; i++) {
-                    auto hash = tinyBinaryCuckooHashTable.heap[i].hash;
-                    auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, LEAF_SIZE);
+                if (a == 0 || (x & GROUP_A_HF_MASK) == 0) {
+                    a = 0;
+                    for (size_t i = 0; i < keysGroupA; i++) {
+                        auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(keys[i], x & (~GROUP_A_HF_MASK), LEAF_SIZE);
+                        candidateCellsCache[i] = candidateCells;
+                        uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
+                        a |= candidatePowers;
+                    }
+                }
+                b = 0;
+                for (size_t i = keysGroupA; i < LEAF_SIZE; i++) {
+                    auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(keys[i], x, LEAF_SIZE);
                     candidateCellsCache[i] = candidateCells;
                     uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
-                    uint64_t isGroupB = (hash.mhc & 1) == 0 ? 0ul : ~0ul; // Compiler simplifies to AND,NEG
-                    a |= candidatePowers & (~isGroupB);
-                    b |= candidatePowers & isGroupB;
+                    b |= candidatePowers;
                 }
                 for (r = 0; r < LEAF_SIZE; r++) {
                     if ((a | rotate(LEAF_SIZE, b, r)) != allSet) {
@@ -442,9 +461,13 @@ class SIMDShockHash {
                 // Use fact that first hash function is < m/2 (see getCandidateCells)
                 ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
                 #ifndef NDEBUG
-                    auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
-                    if ((hash.mhc & 1) == 1) {
+                    TinyBinaryCuckooHashTable::CandidateCells candidateCells;
+                    if ((hash.mhc & 1) == 0) {
+                        // Set A
+                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x & (~GROUP_A_HF_MASK), m);
+                    } else {
                         // Set B
+                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
                         candidateCells.cell1 = (candidateCells.cell1 + r) % m;
                         candidateCells.cell2 = (candidateCells.cell2 + r) % m;
                     }
@@ -454,6 +477,10 @@ class SIMDShockHash {
             x -= SEED;
             x = x * LEAF_SIZE + r;
         } else {
+            tinyBinaryCuckooHashTable.clear();
+            for (size_t i = start; i < end; i++) {
+                tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
+            }
             Vec4x64ui allSet = (1ul << m) - 1;
             Vec4x64ui mask;
             Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
@@ -514,7 +541,6 @@ class SIMDShockHash {
     // Computes and stores the splittings and bijections of a bucket.
     void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary,
                   TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
-        const auto m = bucket.size();
         vector<uint64_t> temp(MAX_BUCKET_SIZE);
         recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0, tinyBinaryCuckooHashTable);
     }
@@ -744,9 +770,15 @@ public:
         if (ROTATION_FITTING && m == LEAF_SIZE) {
             size_t r = b % LEAF_SIZE;
             size_t x = b / LEAF_SIZE + start_seed[NUM_START_SEEDS - 1];
-            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x, LEAF_SIZE);
-            size_t cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
-            if ((key.mhc & 1) == 1) { // Group B, rotate
+            TinyBinaryCuckooHashTable::CandidateCells candidateCells;
+            size_t cell;
+            if ((key.mhc & 1) == 0) {
+                // Group A
+                candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x & (~GROUP_A_HF_MASK), LEAF_SIZE);
+                cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
+            } else {
+                candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x, LEAF_SIZE);
+                cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
                 cell = (cell + r) % LEAF_SIZE;
             }
             return cum_keys + cell;
