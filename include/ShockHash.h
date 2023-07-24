@@ -37,6 +37,8 @@ static uint64_t split_unary, split_fixed;
 static uint64_t time_bij;
 #define MAX_LEVEL_TIME 10
 static uint64_t time_split[MAX_LEVEL_TIME];
+static double split_opt;
+static double bij_opt;
 #endif
 
 // Starting seed at given distance from the root (extracted at random).
@@ -428,6 +430,7 @@ class ShockHash {
                 bij_unary += 1 + (x >> log2golomb);
                 bij_fixed += log2golomb;
                 time_bij += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                bij_opt += log2(x + 1);
 #endif
             } else {
 #ifdef STATS
@@ -459,6 +462,7 @@ class ShockHash {
 
 #ifdef STATS
                     time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                    split_opt += log2(x + 1);
 #endif
                     recSplit(bucket, temp, start, start + split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
                     if (m - split > 1) recSplit(bucket, temp, start + split, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
@@ -489,6 +493,7 @@ class ShockHash {
 
 #ifdef STATS
                     time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                    split_opt += log2(x + 1);
 #endif
                     size_t i;
                     for (i = 0; i < m - lower_aggr; i += lower_aggr) {
@@ -521,6 +526,7 @@ class ShockHash {
 
 #ifdef STATS
                     time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                    split_opt += log2(x + 1);
 #endif
                     size_t i;
                     for (i = 0; i < m - _leaf; i += _leaf) {
@@ -596,8 +602,10 @@ class ShockHash {
             printf("Retrieval:               %f bits/key\n", retrieval);
             printf("Total bits:              %f bits/key\n", ef_sizes + ef_bits + rice_desc + retrieval);
 
-            printf("Total split bits        %16.3f\n", (double)split_fixed + split_unary);
-            printf("Total bij bits:         %16.3f\n", (double)bij_fixed + bij_unary);
+            printf("Split bits:       %16.3f\n", ((double)split_fixed + split_unary) / keys_count);
+            printf("Split bits opt:   %16.3f\n", split_opt / keys_count);
+            printf("Bij bits:         %16.3f\n", ((double)bij_fixed + bij_unary) / keys_count);
+            printf("Bij bits opt:     %16.3f\n", bij_opt / keys_count);
 
             printf("\n");
             printf("Bijections: %13.3f ms\n", time_bij * 1E-6);
