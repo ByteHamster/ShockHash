@@ -72,7 +72,7 @@ FullVecUi remap(FullVecUq x, FullVecUq y, uint32_t n) {
     //FullVecUi combined(compress(x >> 32, y >> 32) ^ compress(x, y)); // This is a bit slower than below
     const FullVecUi xx(x);
     const FullVecUi yy(y);
-#ifdef SIMDRS_512_BIT
+#ifdef SHOCKHASH_SIMD_512_BIT
     FullVecUi combined = blend16<0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30>(xx, yy)
         ^ blend16<1, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21, 23, 25, 27, 29, 31>(xx, yy);
 #else
@@ -202,12 +202,7 @@ class SIMDShockHash {
         assert(m > upper_aggr);
         assert(m <= MAX_BUCKET_SIZE);
         uint64_t x = start_seed[level];
-#ifdef SIMDRS_512_BIT
-        FullVecUq xVec(0, 1, 2, 3, 4, 5, 6, 7);
-#else
-        FullVecUq xVec(0, 1, 2, 3);
-#endif
-        xVec += x;
+        FullVecUq xVec = FULL_VEC_COUNTING + x;
 
         FullVecUi counter;
         FullVecIb found_result;
@@ -279,11 +274,7 @@ class SIMDShockHash {
         static_assert(_MAX_FANOUT <= MAX_FANOUT, "_MAX_FANOUT must be at most MAX_FANOUT!");
         static_assert(SPLIT < 255, "SPLIT must be less than 255 for aggrLevel to work correctly!"
             "Note that less than 256 is not enough since an overflow may carry to the next count.");
-#ifdef SIMDRS_512_BIT
-        FullVecUq xVec(SEED, SEED + 1, SEED + 2, SEED + 3, SEED + 4, SEED + 5, SEED + 6, SEED + 7);
-#else
-        FullVecUq xVec(SEED, SEED + 1, SEED + 2, SEED + 3);
-#endif
+        FullVecUq xVec = FULL_VEC_COUNTING + SEED;
         FullVecIb found_result;
         if (fanout <= 5) {
             FullVecUi count;
@@ -368,35 +359,34 @@ class SIMDShockHash {
         return x;
     }
 
-    static constexpr inline uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
-        return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
-    }
-
     // mask should be ((1ul << l) - 1)
-    static inline Vec4x64ui rotate(Vec4x64ui l, Vec4x64ui val, Vec4x64ui x, Vec4x64ui mask) {
+    static inline FullVecUq rotate(FullVecUq l, FullVecUq val, FullVecUq x, FullVecUq mask) {
         return (shiftLeftV(val, x) | shiftRightV(val, l - x)) & mask;
     }
 
     static inline uint64_t hashKeys(const uint64_t *keys, const size_t from, const size_t to, const uint64_t x,
-                                    const Vec4x64ui &VEC_HALF_LEAF,
+                                    const FullVecUq &VEC_HALF_LEAF,
                                     uint64_t *candidateCells1Cache, uint64_t *candidateCells2Cache) {
         size_t i = from;
-        const Vec4x64ui xV = Vec4x64ui(x);
-        Vec4x64ui aV = VEC_0000;
-        for (; i + 4 < to; i += 4) {
-            Vec4x64ui key;
+        const FullVecUq xV(x);
+        FullVecUq aV = FULL_VEC_ALL_ZERO;
+        for (; i + FULL_VEC_64_COUNT < to; i += FULL_VEC_64_COUNT) {
+            FullVecUq key;
             key.load(&keys[i]);
-            const Vec4x64ui remixed = remixV(key + xV);
-            const Vec4x64ui hash1 = remap32V(remixed, LEAF_SIZE / 2);
-            const Vec4x64ui hash2 = remap32V(remixed >> 32, (LEAF_SIZE + 1) / 2) + VEC_HALF_LEAF;
+            const FullVecUq remixed = remixV(key + xV);
+            const FullVecUq hash1 = remap32V(remixed, LEAF_SIZE / 2);
+            const FullVecUq hash2 = remap32V(remixed >> 32, (LEAF_SIZE + 1) / 2) + VEC_HALF_LEAF;
             hash1.store(&candidateCells1Cache[i]);
             hash2.store(&candidateCells2Cache[i]);
             aV |= powerOfTwo(hash1);
             aV |= powerOfTwo(hash2);
         }
-        uint64_t tmp[4];
+        uint64_t tmp[FULL_VEC_64_COUNT];
         aV.store(&tmp);
         uint64_t a = tmp[0] | tmp[1] | tmp[2] | tmp[3];
+        #ifdef SHOCKHASH_SIMD_512_BIT
+            a |= tmp[4] | tmp[5] | tmp[6] | tmp[7];
+        #endif
         for (; i < to; i++) {
             auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(shockhash::HashedKey(keys[i]), x, LEAF_SIZE);
             candidateCells1Cache[i] = candidateCells.cell1;
@@ -443,22 +433,22 @@ class SIMDShockHash {
             }
             uint64_t a = 0;
             uint64_t b = 0;
-            const Vec4x64ui allSet = (1ul << LEAF_SIZE) - 1;
-            const Vec4x64ui VEC_llll = Vec4x64ui(LEAF_SIZE);
-            const Vec4x64ui VEC_HALF_LEAF = Vec4x64ui(LEAF_SIZE / 2);
+            const FullVecUq allSet((1ul << LEAF_SIZE) - 1);
+            const FullVecUq VEC_llll(LEAF_SIZE);
+            const FullVecUq VEC_HALF_LEAF(LEAF_SIZE / 2);
             for (;;x++) {
                 if (a == 0 || (x & GROUP_A_HF_MASK) == 0) {
                     a = hashKeys(keys, 0, keysGroupA, x & (~GROUP_A_HF_MASK), VEC_HALF_LEAF, candidateCells1Cache, candidateCells2Cache);
                 }
                 b = hashKeys(keys, keysGroupA, LEAF_SIZE, x, VEC_HALF_LEAF, candidateCells1Cache, candidateCells2Cache);
 
-                Vec4x64ui aVec = a;
-                Vec4x64ui bVec = b;
+                FullVecUq aVec(a);
+                FullVecUq bVec(b);
                 for (r = 0; r < LEAF_SIZE; r++) {
-                    Vec4x64ui rVec = VEC_0123 + r;
+                    FullVecUq rVec = FULL_VEC_COUNTING + r;
                     size_t firstR = horizontal_find_first((aVec | rotate(VEC_llll, bVec, rVec, allSet)) == allSet);
                     if (firstR == ~0ul) {
-                        r += 3; // +1 due to loop
+                        r += FULL_VEC_64_COUNT - 1; // +1 due to loop
                         continue;
                     }
                     r += firstR;
@@ -512,9 +502,9 @@ class SIMDShockHash {
             for (size_t i = start; i < end; i++) {
                 tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(bucket[i]));
             }
-            Vec4x64ui allSet = (1ul << m) - 1;
-            Vec4x64ui mask;
-            Vec4x64ui xVec(x, x + 1, x + 2, x + 3);
+            FullVecUq allSet = (1ul << m) - 1;
+            FullVecUq mask;
+            FullVecUq xVec = FULL_VEC_COUNTING + x;
             for (;;) {
                 for (;;) {
                     mask = 0;
@@ -524,15 +514,15 @@ class SIMDShockHash {
                         mask |= powerOfTwo(hash.cell2);
                     }
                     if (horizontal_or(mask == allSet)) break;
-                    x += 4;
-                    xVec += 4;
+                    x += FULL_VEC_64_COUNT;
+                    xVec += FULL_VEC_ALL_64_COUNT;
                 }
                 const auto found_idx = horizontal_find_first(mask == allSet);
                 if (tinyBinaryCuckooHashTable.construct(x + found_idx)) {
                     x += found_idx;
                     break;
                 }
-                size_t offset = (horizontal_count(mask == allSet) == 1) ? 8 : (found_idx + 1);
+                size_t offset = (horizontal_count(mask == allSet) == 1) ? FULL_VEC_64_COUNT : (found_idx + 1);
                 x += offset;
                 xVec += offset;
             }

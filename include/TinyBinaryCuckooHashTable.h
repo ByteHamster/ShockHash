@@ -139,14 +139,14 @@ class TinyBinaryCuckooHashTable {
 
 #ifdef SIMD
         typedef struct {
-            Vec4x64ui cell1;
-            Vec4x64ui cell2;
+            FullVecUq cell1;
+            FullVecUq cell2;
         } CandidateCellsSIMD;
 
-        static inline CandidateCellsSIMD getCandidateCellsSIMD(Vec4x64ui valueAndSeed, uint64_t range) {
-            const Vec4x64ui remixed = remixV(valueAndSeed);
-            const Vec4x64ui hash1 = remap32V(remixed, range / 2);
-            const Vec4x64ui hash2 = remap32V(remixed >> 32, (range + 1) / 2) + range / 2;
+        static inline CandidateCellsSIMD getCandidateCellsSIMD(FullVecUq valueAndSeed, uint64_t range) {
+            const FullVecUq remixed = remixV(valueAndSeed);
+            const FullVecUq hash1 = remap32V(remixed, range / 2);
+            const FullVecUq hash2 = remap32V(remixed >> 32, (range + 1) / 2) + range / 2;
 
             assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(valueAndSeed.extract(0)), 0, range).cell1 == hash1.extract(0));
             assert(TinyBinaryCuckooHashTable::getCandidateCells(HashedKey(valueAndSeed.extract(0)), 0, range).cell2 == hash2.extract(0));
