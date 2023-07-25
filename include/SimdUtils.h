@@ -39,26 +39,34 @@ static const FullVecUq FULL_VEC_ALL_64_COUNT = FullVecUq(FULL_VEC_64_COUNT);
 * 13th variant of the 64-bit finalizer function in Austin Appleby's
 * MurmurHash3 (https://github.com/aappleby/smhasher).
 */
-Vec4uq inline remixV(Vec4uq z) {
+FullVecUq inline remixV(FullVecUq z) {
     z = (z ^ (z >> 30)) * 0xbf58476d1ce4e5b9;
     z = (z ^ (z >> 27)) * 0x94d049bb133111eb;
     return z ^ (z >> 31);
 }
 
-Vec4uq remap32V(Vec4uq remixed, uint32_t n) {
+FullVecUq remap32V(FullVecUq remixed, uint32_t n) {
     constexpr uint32_t mask = (uint64_t(1) << 32) - 1;
     return ((remixed & mask) * n) >> 32;
 }
 
-static Vec4uq shiftLeftV(Vec4uq x, Vec4uq y) {
-    return _mm256_sllv_epi64(x, y);
+static FullVecUq shiftLeftV(FullVecUq x, FullVecUq y) {
+    #ifdef SHOCKHASH_SIMD_512_BIT
+        return _mm512_sllv_epi64(x, y);
+    #else
+        return _mm256_sllv_epi64(x, y);
+    #endif
 }
 
-static Vec4uq shiftRightV(Vec4uq x, Vec4uq y) {
-    return _mm256_srlv_epi64(x, y);
+static FullVecUq shiftRightV(FullVecUq x, FullVecUq y) {
+    #ifdef SHOCKHASH_SIMD_512_BIT
+        return _mm512_srlv_epi64(x, y);
+    #else
+        return _mm256_srlv_epi64(x, y);
+    #endif
 }
 
-static Vec4uq powerOfTwo(Vec4uq x) {
+static FullVecUq powerOfTwo(FullVecUq x) {
     return shiftLeftV(FULL_VEC_ALL_ONE, x);
 }
 

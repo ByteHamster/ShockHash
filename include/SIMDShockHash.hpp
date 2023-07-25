@@ -507,7 +507,7 @@ class SIMDShockHash {
             FullVecUq xVec = FULL_VEC_COUNTING + x;
             for (;;) {
                 for (;;) {
-                    mask = 0;
+                    mask = FullVecUq(0);
                     for (size_t i = start; i < end; i++) {
                         auto hash = TinyBinaryCuckooHashTable::getCandidateCellsSIMD(bucket[i] + xVec, m);
                         mask |= powerOfTwo(hash.cell1);
