@@ -73,7 +73,7 @@ template <size_t LEAF_SIZE> class SplittingStrategy {
 // (following 11 bits) and the sum of the Golomb-Rice codelengths in the same
 // subtree (lower 16 bits).
 
-template <size_t LEAF_SIZE> static constexpr void _fill_golomb_rice(const int m, array<uint32_t, MAX_BUCKET_SIZE> *memo) {
+template <size_t LEAF_SIZE> static constexpr void _fill_golomb_rice(const size_t m, array<uint32_t, MAX_BUCKET_SIZE> *memo) {
     array<int, MAX_FANOUT> k{0};
 
     constexpr size_t lower_aggr = SplittingStrategy<LEAF_SIZE>::lower_aggr;

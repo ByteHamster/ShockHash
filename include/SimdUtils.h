@@ -41,6 +41,9 @@ constexpr uint32_t FULL_VEC_64_COUNT = FULL_VEC_32_COUNT / 2;
 
 using Vec4x64ui = Vec4uq;
 
+static const Vec4x64ui VEC_0123 = Vec4x64ui(0, 1, 2, 3);
+static const Vec4x64ui VEC_1111 = Vec4x64ui(1);
+
 /** David Stafford's (http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html)
 * 13th variant of the 64-bit finalizer function in Austin Appleby's
 * MurmurHash3 (https://github.com/aappleby/smhasher).
@@ -54,6 +57,18 @@ Vec4x64ui inline remixV(Vec4x64ui z) {
 Vec4x64ui remap32V(Vec4x64ui remixed, uint32_t n) {
     constexpr uint32_t mask = (uint64_t(1) << 32) - 1;
     return ((remixed & mask) * n) >> 32;
+}
+
+static Vec4x64ui shiftLeftV(Vec4x64ui x, Vec4x64ui y) {
+    return _mm256_sllv_epi64(x, y);
+}
+
+static Vec4x64ui shiftRightV(Vec4x64ui x, Vec4x64ui y) {
+    return _mm256_srlv_epi64(x, y);
+}
+
+static Vec4x64ui powerOfTwo(Vec4x64ui x) {
+    return shiftLeftV(VEC_1111, x);
 }
 
 } // namespace shockhash

@@ -93,10 +93,6 @@ uint32_t remix32(uint32_t z) {
     return z;
 }
 
-static Vec4x64ui powerOfTwo(Vec4x64ui x) {
-    return _mm256_sllv_epi64(Vec4x64ui(1), x);
-}
-
 // The first 4 entries are 0, then there are the first 4 powers of 256
 // and then a zero padding.
 static constexpr array<uint32_t, 4 + MAX_FANOUT + FULL_VEC_32_COUNT> fill_aggr_level_count_lookup() {
@@ -372,8 +368,13 @@ class SIMDShockHash {
         return x;
     }
 
-    static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
+    static constexpr inline uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
         return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
+    }
+
+    // mask should be ((1ul << l) - 1)
+    static inline Vec4x64ui rotate(Vec4x64ui l, Vec4x64ui val, Vec4x64ui x, Vec4x64ui mask) {
+        return (shiftLeftV(val, x) | shiftRightV(val, l - x)) & mask;
     }
 
     void leafLevel(vector<uint64_t> &bucket, size_t start, size_t m, typename RiceBitVector<AT>::Builder &builder,
@@ -390,7 +391,6 @@ class SIMDShockHash {
 
         // Begin: difference to SIMDRecSplit.
         if (ROTATION_FITTING && m == LEAF_SIZE) {
-            constexpr uint64_t allSet = (1ul << LEAF_SIZE) - 1;
             size_t r = 0;
             size_t keysGroupA = 0;
             size_t indexB = LEAF_SIZE - 1;
@@ -412,6 +412,8 @@ class SIMDShockHash {
             }
             uint64_t a = 0;
             uint64_t b = 0;
+            const Vec4x64ui allSet = (1ul << LEAF_SIZE) - 1;
+            const Vec4x64ui VEC_llll = Vec4x64ui(LEAF_SIZE);
             for (;;x++) {
                 if (a == 0 || (x & GROUP_A_HF_MASK) == 0) {
                     a = 0;
@@ -429,10 +431,16 @@ class SIMDShockHash {
                     uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
                     b |= candidatePowers;
                 }
+                Vec4x64ui aVec = a;
+                Vec4x64ui bVec = b;
                 for (r = 0; r < LEAF_SIZE; r++) {
-                    if ((a | rotate(LEAF_SIZE, b, r)) != allSet) {
+                    Vec4x64ui rVec = VEC_0123 + r;
+                    size_t firstR = horizontal_find_first((aVec | rotate(VEC_llll, bVec, rVec, allSet)) == allSet);
+                    if (firstR == ~0ul) {
+                        r += 3; // +1 due to loop
                         continue;
                     }
+                    r += firstR;
                     tinyBinaryCuckooHashTable.clearPlacement();
                     size_t i = 0;
                     for (i = 0; i < LEAF_SIZE; i++) {
