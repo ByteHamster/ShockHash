@@ -43,6 +43,7 @@ using Vec4x64ui = Vec4uq;
 
 static const Vec4x64ui VEC_0123 = Vec4x64ui(0, 1, 2, 3);
 static const Vec4x64ui VEC_1111 = Vec4x64ui(1);
+static const Vec4x64ui VEC_0000 = Vec4x64ui(0);
 
 /** David Stafford's (http://zimbry.blogspot.com/2011/09/better-bit-mixing-improving-on.html)
 * 13th variant of the 64-bit finalizer function in Austin Appleby's
