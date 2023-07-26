@@ -29,7 +29,7 @@ using namespace std::chrono;
 // Assumed *maximum* size of a bucket. Works with high probability up to average bucket size ~2000.
 static const int MAX_BUCKET_SIZE = 3000;
 static const int MAX_FANOUT = 32;
-static const int MAX_LEAF_SIZE = 50;
+static const int MAX_LEAF_SIZE = 60;
 
 #if defined(STATS)
 static uint64_t bij_unary, bij_fixed;
@@ -54,7 +54,8 @@ static constexpr uint8_t bij_memo[MAX_LEAF_SIZE + 1] = {
          7,  7,  8,  8,  9,  9,  9, 10, 10, 10, // 20..29
         11, 11, 12, 12, 13, 13, 13, 14, 15, 15, // 30..39
         15, 16, 16, 16, 17, 17, 18, 18, 19, 19, // 40..49
-        20, // 50
+        19, 20, 20, 20, 21, 21, 22, 22, 23, 23, // 50..59
+        23 // 60
 };
 
 template <size_t LEAF_SIZE> class SplittingStrategy {
