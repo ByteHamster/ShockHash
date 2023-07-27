@@ -237,10 +237,10 @@ class ShockHash {
                 size_t cell;
                 if ((key.mhc & 1) == 0) {
                     // Group A
-                    candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x & (~GROUP_A_HF_MASK), LEAF_SIZE);
+                    candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(key, x & (~GROUP_A_HF_MASK));
                     cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
                 } else {
-                    candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(key, x, LEAF_SIZE);
+                    candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(key, x);
                     cell = hashFunctionIndex == 0 ? candidateCells.cell1 : candidateCells.cell2;
                     cell = (cell + r) % LEAF_SIZE;
                 }
@@ -329,7 +329,7 @@ class ShockHash {
                         if (a == 0 || (x & GROUP_A_HF_MASK) == 0) {
                             a = 0;
                             for (size_t i = 0; i < keysGroupA; i++) {
-                                auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(keys[i], x & (~GROUP_A_HF_MASK), LEAF_SIZE);
+                                auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(keys[i], x & (~GROUP_A_HF_MASK));
                                 candidateCellsCache[i] = candidateCells;
                                 uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
                                 a |= candidatePowers;
@@ -337,7 +337,7 @@ class ShockHash {
                         }
                         b = 0;
                         for (size_t i = keysGroupA; i < LEAF_SIZE; i++) {
-                            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(keys[i], x, LEAF_SIZE);
+                            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(keys[i], x);
                             candidateCellsCache[i] = candidateCells;
                             uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
                             b |= candidatePowers;

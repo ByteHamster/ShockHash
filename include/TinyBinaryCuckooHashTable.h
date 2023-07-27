@@ -124,6 +124,14 @@ class TinyBinaryCuckooHashTable {
             uint32_t cell2;
         } CandidateCells;
 
+        template <size_t range>
+        static inline CandidateCells getCandidateCells(const HashedKey key, size_t seed) {
+            uint64_t remixed = util::remix(key.mhc + seed);
+            const uint32_t hash1 = util::fastrange32<range / 2>(remixed);
+            const uint32_t hash2 = util::fastrange32<(range + 1) / 2>(remixed >> 32) + range / 2;
+            return {hash1, hash2};
+        }
+
         static inline CandidateCells getCandidateCells(const HashedKey key, size_t seed, size_t range) {
             uint64_t remixed = util::remix(key.mhc + seed);
             const uint32_t hash1 = util::fastrange32(remixed, range / 2);

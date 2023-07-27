@@ -388,7 +388,7 @@ class SIMDShockHash {
             a |= tmp[4] | tmp[5] | tmp[6] | tmp[7];
         #endif
         for (; i < to; i++) {
-            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(shockhash::HashedKey(keys[i]), x, LEAF_SIZE);
+            auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(shockhash::HashedKey(keys[i]), x);
             candidateCells1Cache[i] = candidateCells.cell1;
             candidateCells2Cache[i] = candidateCells.cell2;
             uint64_t candidatePowers = (1ull << candidateCells.cell1) | (1ull << candidateCells.cell2);
@@ -486,10 +486,10 @@ class SIMDShockHash {
                     TinyBinaryCuckooHashTable::CandidateCells candidateCells;
                     if ((hash.mhc & 1) == 0) {
                         // Set A
-                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x & (~GROUP_A_HF_MASK), m);
+                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(hash, x & (~GROUP_A_HF_MASK));
                     } else {
                         // Set B
-                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
+                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(hash, x);
                         candidateCells.cell1 = (candidateCells.cell1 + r) % m;
                         candidateCells.cell2 = (candidateCells.cell2 + r) % m;
                     }
