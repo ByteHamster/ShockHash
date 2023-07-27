@@ -456,7 +456,8 @@ class SIMDShockHash {
                     size_t i = 0;
                     for (i = 0; i < LEAF_SIZE; i++) {
                         auto candidateCells = TinyBinaryCuckooHashTable::CandidateCells {
-                            candidateCells1Cache[i], candidateCells2Cache[i] };
+                            static_cast<uint32_t>(candidateCells1Cache[i]),
+                            static_cast<uint32_t>(candidateCells2Cache[i]) };
                         if ((tinyBinaryCuckooHashTable.heap[i].hash.mhc & 1) == 1) {
                             // Set B
                             candidateCells.cell1 = (candidateCells.cell1 + r) % LEAF_SIZE;
