@@ -190,13 +190,13 @@ void testShockHashRot(size_t l) {
 }
 
 int main() {
-    for (size_t l = 3; l <= 20; l++) {
-        /*if (l <= 25) {
+    for (size_t l = 5; l <= 40; l++) {
+        if (l <= 25) {
             testRotationFitting(l);
         }
         if (l <= 22) {
             testBruteForce(l);
-        }*/
+        }
         testShockHash(l);
         testShockHashRot(l);
     }
