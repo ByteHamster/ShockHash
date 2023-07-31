@@ -38,12 +38,16 @@ if(NOT TARGET Ips2raShockHashSorter)
     target_compile_options(Ips2raShockHashSorter PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
 endif()
 
+if(NOT TARGET ByteHamsterUtil)
+    add_subdirectory(extlib/util)
+endif()
+
 # ---------------------------- Library Setup ----------------------------
 
 add_library(ShockHash INTERFACE)
 target_include_directories(ShockHash INTERFACE include)
 target_compile_features(ShockHash INTERFACE cxx_std_20)
-target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter)
+target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter ByteHamsterUtil)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/extlib/cmake-findsse/FindSSE.cmake)
 FindSSE()
@@ -58,8 +62,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_library(BenchmarkUtils INTERFACE)
     target_include_directories(BenchmarkUtils INTERFACE benchmark)
     target_include_directories(BenchmarkUtils INTERFACE test)
-    target_include_directories(BenchmarkUtils INTERFACE extlib/util/include)
-    target_link_libraries(BenchmarkUtils INTERFACE tlx)
+    target_link_libraries(BenchmarkUtils INTERFACE tlx ByteHamsterUtil)
 
     # Warnings if this is the main project
     target_compile_options(ShockHash INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -frecord-gcc-switches>)
