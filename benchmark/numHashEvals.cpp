@@ -4,6 +4,8 @@
 #include "../include/TinyBinaryCuckooHashTable.h"
 #include <XorShift64.h>
 #include <chrono>
+#include <set>
+#include <unordered_set>
 
 static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
     return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
@@ -94,6 +96,7 @@ void testShockHash(size_t l) {
     size_t numIterations = l <= 30 ? 20000 : (l <= 43 ? 4000 : 1000);
     size_t totalTries = 0;
     size_t hfEvals = 0;
+    size_t totalPseudotrees = 0;
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
         shockhash::TinyBinaryCuckooHashTable table(l);
         for (size_t i = 0; i < l; i++) {
@@ -103,6 +106,23 @@ void testShockHash(size_t l) {
             totalTries++;
             hfEvals += 2 * l;
         }
+        // Find number of pseudotrees
+        shockhash::UnionFind unionFind(l);
+        for (size_t i = 0; i < l; i++) {
+            shockhash::TinyBinaryCuckooHashTable::CandidateCells candidateCells
+                    = shockhash::TinyBinaryCuckooHashTable::getCandidateCells(table.heap[i].hash, totalTries, l);
+            bool res = unionFind.unionIsStillPseudoforrest(candidateCells.cell1, candidateCells.cell2);
+            if (!res) {
+                std::cerr << "Something went wrong" << std::endl;
+                exit(1);
+            }
+        }
+        std::unordered_set<uint64_t> representatives;
+        for (size_t i = 0; i < l; i++) {
+            size_t repr = unionFind.findRepresentative(i);
+            representatives.insert(repr);
+        }
+        totalPseudotrees += representatives.size();
     }
     std::cout<<"RESULT"
             <<" method=cuckoo"
@@ -111,6 +131,7 @@ void testShockHash(size_t l) {
             <<" tries="<<(double)totalTries / (double)numIterations
             <<" iterations="<<numIterations
             <<" spaceEstimate="<<log2((double)totalTries / (double)numIterations) / l + 1
+            <<" pseudotrees="<< (double)totalPseudotrees/(double)numIterations
             <<std::endl;
 }
 
