@@ -93,16 +93,24 @@ void testBruteForce(size_t l) {
 }
 
 void testShockHash(size_t l) {
-    size_t numIterations = l <= 30 ? 20000 : (l <= 43 ? 4000 : 1000);
+    size_t numIterations = 20000;
+    if (l > 50) {
+        numIterations = 100;
+    } else if (l > 42) {
+        numIterations = 1000;
+    } else if (l > 30) {
+        numIterations = 4000;
+    }
     size_t totalTries = 0;
     size_t hfEvals = 0;
     size_t totalPseudotrees = 0;
+    size_t totalOrientations = 0;
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
         shockhash::TinyBinaryCuckooHashTable table(l);
         for (size_t i = 0; i < l; i++) {
             table.prepare(shockhash::HashedKey(std::to_string(i) + " " + std::to_string(iteration)));
         }
-        while (!table.construct(totalTries)) { // totalTries is the (unique) seed here
+        while (!table.testPassesFilter(totalTries) || !table.construct(totalTries)) { // totalTries is the (unique) seed here
             totalTries++;
             hfEvals += 2 * l;
         }
@@ -123,6 +131,7 @@ void testShockHash(size_t l) {
             representatives.insert(repr);
         }
         totalPseudotrees += representatives.size();
+        totalOrientations += 1ul<<representatives.size();
     }
     std::cout<<"RESULT"
             <<" method=cuckoo"
@@ -132,6 +141,7 @@ void testShockHash(size_t l) {
             <<" iterations="<<numIterations
             <<" spaceEstimate="<<log2((double)totalTries / (double)numIterations) / l + 1
             <<" pseudotrees="<< (double)totalPseudotrees/(double)numIterations
+            <<" orientations="<< (double)totalOrientations/(double)numIterations
             <<std::endl;
 }
 

@@ -69,17 +69,22 @@ class TinyBinaryCuckooHashTable {
             numEntries++;
         }
 
+        bool testPassesFilter(size_t seed) {
+            assert(numEntries <= 64);
+            uint64_t used = 0;
+            for (size_t i = 0; i < numEntries; i++) {
+                CandidateCells hash = getCandidateCells(heap[i].hash, seed, numEntries);
+                used |= (1ul << hash.cell1) | (1ul << hash.cell2);
+            }
+            return used == (1ul << numEntries) - 1;
+        }
+
         bool construct(size_t seed_) {
             seed = seed_;
 
+            /*
             // Filter based on unused cells
-            assert(numEntries <= 64);
-            /*uint64_t used = 0;
-            for (size_t i = 0; i < numEntries; i++) {
-                Union64 hash = getCandidateCells(heap[i].hash, seed, M);
-                used |= (1ul << hash.halves.low) | (1ul << hash.halves.high);
-            }
-            if (std::popcount(used) != numEntries) {
+            if (!testPassesFilter(seed_)) {
                 return false;
             }
 
