@@ -2,6 +2,7 @@
 #include <iostream>
 #include <XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
+#include "BenchmarkData.h"
 #ifdef SIMD
 #include "SIMDShockHash.hpp"
 template <size_t l>
@@ -28,12 +29,17 @@ template<typename HashFunc>
 void construct() {
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
-    std::cout<<"Generating input data (Seed: "<<seed<<")"<<std::endl;
     util::XorShift64 prng(seed);
-	std::vector<sux::function::hash128_t> keys;
-    for (size_t i = 0; i < numObjects; i++) {
-        keys.push_back(sux::function::hash128_t(prng(), prng()));
-    }
+    //#define STRING_KEYS
+    #ifdef STRING_KEYS
+        std::vector<std::string> keys = generateInputData(numObjects);
+    #else
+        std::cout<<"Generating input data (Seed: "<<seed<<")"<<std::endl;
+        std::vector<sux::function::hash128_t> keys;
+        for (size_t i = 0; i < numObjects; i++) {
+            keys.push_back(sux::function::hash128_t(prng(), prng()));
+        }
+    #endif
 
     std::cout<<"Constructing"<<std::endl;
     auto beginConstruction = std::chrono::high_resolution_clock::now();
