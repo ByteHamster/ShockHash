@@ -1,6 +1,9 @@
 # ShockHash
 
 Small, heavily overloaded cuckoo hash tables inside the [RecSplit](https://github.com/vigna/sux/blob/master/sux/function/RecSplit.hpp) framework.
+Constructs very compact perfect hash functions significantly faster than previous approaches.
+
+<img src="https://raw.githubusercontent.com/ByteHamster/ShockHash/main/plots.png" alt="Plots preview" />
 
 ### Library Usage
 
