@@ -105,6 +105,7 @@ void testShockHash(size_t l) {
     size_t hfEvals = 0;
     size_t totalPseudotrees = 0;
     size_t totalOrientations = 0;
+    size_t totalWith1Component = 0;
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
         shockhash::TinyBinaryCuckooHashTable table(l);
         for (size_t i = 0; i < l; i++) {
@@ -132,6 +133,9 @@ void testShockHash(size_t l) {
         }
         totalPseudotrees += representatives.size();
         totalOrientations += 1ul<<representatives.size();
+        if (representatives.size() == 1) {
+            totalWith1Component++;
+        }
     }
     std::cout<<"RESULT"
             <<" method=cuckoo"
@@ -142,6 +146,7 @@ void testShockHash(size_t l) {
             <<" spaceEstimate="<<log2((double)totalTries / (double)numIterations) / l + 1
             <<" pseudotrees="<< (double)totalPseudotrees/(double)numIterations
             <<" orientations="<< (double)totalOrientations/(double)numIterations
+            <<" totalWith1Component="<< (double)totalWith1Component/(double)numIterations
             <<std::endl;
 }
 
