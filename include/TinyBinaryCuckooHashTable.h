@@ -5,7 +5,6 @@
 #include "Function.h"
 #include "MurmurHash64.h"
 #include <cstring>
-#include "UnionFind.h"
 #ifdef SIMD
 #include "SimdUtils.h"
 #endif
@@ -44,12 +43,11 @@ class TinyBinaryCuckooHashTable {
         TableEntry *heap;
         TableEntry** cells;
         const size_t NMax;
-        UnionFind unionFind;
     private:
         size_t seed = 0;
         size_t numEntries = 0;
     public:
-        explicit TinyBinaryCuckooHashTable(size_t NMax) : NMax(NMax), unionFind(NMax) {
+        explicit TinyBinaryCuckooHashTable(size_t NMax) : NMax(NMax) {
             heap = new TableEntry[NMax];
             cells = new TableEntry*[NMax];
         }
@@ -92,7 +90,7 @@ class TinyBinaryCuckooHashTable {
             unionFind.clear();
             for (size_t i = 0; i < numEntries; i++) {
                 Union64 hash = getCandidateCells(heap[i].hash, seed, M);
-                if (!unionFind.unionIsStillPseudoforrest(hash.halves.high, hash.halves.low)) {
+                if (!unionFind.unionIsStillPseudoforest(hash.halves.high, hash.halves.low)) {
                     return false;
                 }
             }*/

@@ -120,7 +120,7 @@ void testShockHash(size_t l) {
         for (size_t i = 0; i < l; i++) {
             shockhash::TinyBinaryCuckooHashTable::CandidateCells candidateCells
                     = shockhash::TinyBinaryCuckooHashTable::getCandidateCells(table.heap[i].hash, totalTries, l);
-            bool res = unionFind.unionIsStillPseudoforrest(candidateCells.cell1, candidateCells.cell2);
+            bool res = unionFind.unionIsStillPseudoforest(candidateCells.cell1, candidateCells.cell2);
             if (!res) {
                 std::cerr << "Something went wrong" << std::endl;
                 exit(1);
@@ -180,7 +180,7 @@ void testShockHashRot(size_t l) {
                 auto candidateCells = shockhash::TinyBinaryCuckooHashTable::getCandidateCells(shockhash::HashedKey(keys.at(i)), totalTries, l);
                 a |= 1ull << candidateCells.cell1;
                 a |= 1ull << candidateCells.cell2;
-                if (!unionFind.unionIsStillPseudoforrest(candidateCells.cell1, candidateCells.cell2)) {
+                if (!unionFind.unionIsStillPseudoforest(candidateCells.cell1, candidateCells.cell2)) {
                     goto mainLoop; // First half does not work, so no reason to try second half
                 }
             }
@@ -203,7 +203,7 @@ void testShockHashRot(size_t l) {
                 size_t i = l/2;
                 for (; i < l; i++) {
                     auto candidateCells = candidateCellsB.at(i);
-                    if (!unionFindCopy.unionIsStillPseudoforrest((candidateCells.cell1 + r) % l, (candidateCells.cell2 + r) % l)) {
+                    if (!unionFindCopy.unionIsStillPseudoforest((candidateCells.cell1 + r) % l, (candidateCells.cell2 + r) % l)) {
                         break; // Try next rotation
                     }
                 }

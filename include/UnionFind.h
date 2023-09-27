@@ -1,5 +1,10 @@
 #pragma once
 
+#include <vector>
+#include <cassert>
+#include <cstddef>
+#include <cstdint>
+
 namespace shockhash {
 class UnionFind {
         std::vector<size_t> parents;
@@ -29,7 +34,7 @@ class UnionFind {
             return x;
         }
 
-        bool unionIsStillPseudoforrest(size_t x, size_t y) {
+        bool unionIsStillPseudoforest(size_t x, size_t y) {
             assert(x < n && y < n);
             size_t repr1 = findRepresentative(x);
             size_t repr2 = findRepresentative(y);
