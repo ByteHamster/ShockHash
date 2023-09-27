@@ -5,6 +5,7 @@
 #include "BenchmarkData.h"
 #ifdef SIMD
 #include "SIMDShockHash.hpp"
+#include "SIMDShockHash2.hpp"
 template <size_t l>
 using ShockHash = shockhash::SIMDShockHash<l, false>;
 template <size_t l>
@@ -20,6 +21,7 @@ using ShockHashRotate = shockhash::ShockHash<l, true>;
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
 
 bool rotate = false;
+bool shockhash2 = false;
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
 size_t leafSize = 20;
@@ -108,6 +110,7 @@ int main(int argc, const char* const* argv) {
     cmd.add_bytes('l', "leafSize", leafSize, "Leaf size to construct");
     cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
     cmd.add_bool('r', "rotate", rotate, "Apply rotation fitting");
+    cmd.add_bool('2', "shockhash2", shockhash2, "ShockHash2");
 
     if (!cmd.process(argc, argv)) {
         return 1;
@@ -115,8 +118,10 @@ int main(int argc, const char* const* argv) {
 
     if (rotate) {
         dispatchLeafSize<ShockHashRotate, shockhash::MAX_LEAF_SIZE>(leafSize);
+    } else if (shockhash2) {
+        dispatchLeafSize<shockhash::SIMDShockHash2, shockhash::MAX_LEAF_SIZE>(leafSize);
     } else {
-        dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
+        //dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
     }
     return 0;
 }
