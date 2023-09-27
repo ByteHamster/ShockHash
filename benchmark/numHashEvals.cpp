@@ -2,6 +2,7 @@
 #include <vector>
 #include <cmath>
 #include "../include/TinyBinaryCuckooHashTable.h"
+#include "../include/UnionFind.h"
 #include <XorShift64.h>
 #include <chrono>
 #include <set>
