@@ -172,6 +172,8 @@ class TinyBinaryCuckooHashTable {
 
         bool insert(TableEntry *entry, CandidateCells candidates) {
             TableEntry *origEntry = entry;
+            assert(candidates.cell1 < numEntries && candidates.cell2 < numEntries);
+            assert((unsigned long)(entry - heap) < numEntries * sizeof(TableEntry));
             entry->candidateCellsXor = candidates.cell1 ^ candidates.cell2;
             if (cells[candidates.cell1] == nullptr) {
                 cells[candidates.cell1] = entry;

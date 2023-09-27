@@ -27,12 +27,33 @@ class UnionFind {
         size_t findRepresentative(size_t x) {
             assert(x < n);
             while (parents[x] != x) {
-                //size_t xOld = x;
                 x = parents[x];
-                //parents[xOld] = parents[x]; // Path compression is slower
             }
             return x;
         }
+
+        /*size_t findRepresentative(size_t x) { // Recursive with path compression
+            assert(x < n);
+            if (parents[x] == x) {
+               return x;
+            }
+            return parents[x] = findRepresentative(parents[x]);
+        }
+
+        size_t findRepresentative(size_t origX) { // Two iterations with path compression
+            assert(x < n);
+            size_t x = origX;
+            while (parents[x] != x) {
+                x = parents[x];
+            }
+            size_t y = origX;
+            while (parents[y] != x) {
+                size_t oldY = y;
+                y = parents[y];
+                parents[oldY] = x;
+            }
+            return x;
+        }*/
 
         bool unionIsStillPseudoforest(size_t x, size_t y) {
             assert(x < n && y < n);
