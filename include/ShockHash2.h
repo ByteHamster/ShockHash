@@ -22,7 +22,7 @@
 #include "ShockHash2-internal.h"
 
 namespace shockhash {
-static const int MAX_LEAF_SIZE2 = 90;
+static const int MAX_LEAF_SIZE2 = 120;
 
 // Optimal Golomb-Rice parameters for leaves.
 static constexpr uint8_t bij_memo2[MAX_LEAF_SIZE2 + 1] = {
@@ -34,8 +34,11 @@ static constexpr uint8_t bij_memo2[MAX_LEAF_SIZE2 + 1] = {
         20, 21, 21, 21, 22, 22, 23, 23, 24, 24, // 50..59
         24, 24, 25, 25, 25, 26, 26, 26, 27, 27, // 60..69
         28, 28, 28, 29, 30, 30, 30, 31, 32, 31, // 70..79
-        32, 32, 33, 33, 33, 34, 35, 35, 35, 36, // 80..89
-        36 // 90
+        32, 32, 33, 33, 33, 34, 35, 35, 36, 36, // 80..89
+        36, 36, 37, 37, 38, 38, 39, 39, 40, 40, // 90..99
+        41, 41, 43, 43, 44, 44, 44, 44, 45, 45, // 100..109
+        46, 46, 46, 47, 47, 47, 48, 48, 49, 49, // 110..119
+        50 // 120
 };
 
 template <size_t LEAF_SIZE> class SplittingStrategy2 {
