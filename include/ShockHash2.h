@@ -52,8 +52,8 @@ template <size_t LEAF_SIZE> class SplittingStrategy2 {
 // (following 11 bits) and the sum of the Golomb-Rice codelengths in the same
 // subtree (lower 16 bits).
 
-template <size_t LEAF_SIZE> static constexpr void _fill_golomb_rice2(const size_t m, array<uint32_t, MAX_BUCKET_SIZE> *memo) {
-    array<int, MAX_FANOUT> k{0};
+template <size_t LEAF_SIZE> static constexpr void _fill_golomb_rice2(const size_t m, array<uint64_t, MAX_BUCKET_SIZE> *memo) {
+    array<long, MAX_FANOUT> k{0};
 
     constexpr size_t lower_aggr = SplittingStrategy2<LEAF_SIZE>::lower_aggr;
     constexpr size_t upper_aggr = SplittingStrategy2<LEAF_SIZE>::upper_aggr;
@@ -80,9 +80,10 @@ template <size_t LEAF_SIZE> static constexpr void _fill_golomb_rice2(const size_
     for (size_t i = 0; i < fanout; ++i) sqrt_prod *= sqrt(k[i]);
 
     const double p = sqrt(m) / (pow(2 * M_PI, (fanout - 1.) / 2) * sqrt_prod);
-    auto golomb_rice_length = (uint32_t)ceil(log2(-log((sqrt(5) + 1) / 2) / log1p(-p))); // log2 Golomb modulus
+    uint64_t golomb_rice_length = ceil(log2(-log((sqrt(5) + 1) / 2) / log1p(-p))); // log2 Golomb modulus
 
     assert(golomb_rice_length <= 0x1F); // Golomb-Rice code, stored in the 5 upper bits
+    assert((golomb_rice_length << 27) >> 27 == golomb_rice_length);
     (*memo)[m] = golomb_rice_length << 27;
     for (size_t i = 0; i < fanout; ++i) golomb_rice_length += (*memo)[k[i]] & 0xFFFF;
     assert(golomb_rice_length <= 0xFFFF); // Sum of Golomb-Rice codeslengths in the subtree, stored in the lower 16 bits
@@ -94,10 +95,13 @@ template <size_t LEAF_SIZE> static constexpr void _fill_golomb_rice2(const size_
     (*memo)[m] |= nodes << 16;
 }
 
-template <size_t LEAF_SIZE> static constexpr array<uint32_t, MAX_BUCKET_SIZE> fill_golomb_rice2() {
-    array<uint32_t, MAX_BUCKET_SIZE> memo{0};
+template <size_t LEAF_SIZE> static constexpr array<uint64_t, MAX_BUCKET_SIZE> fill_golomb_rice2() {
+    array<uint64_t, MAX_BUCKET_SIZE> memo{0};
     size_t s = 0;
-    for (; s <= LEAF_SIZE; ++s) memo[s] = bij_memo2[s] << 27 | (s > 1) << 16 | bij_memo2[s];
+    for (; s <= LEAF_SIZE; ++s) {
+        memo[s] = uint64_t(bij_memo2[s]) << 27 | (s > 1) << 16 | bij_memo2[s];
+        assert(memo[s] >> 27 == bij_memo2[s]);
+    }
     for (; s < MAX_BUCKET_SIZE; ++s) _fill_golomb_rice2<LEAF_SIZE>(s, &memo);
     return memo;
 }
@@ -112,7 +116,7 @@ class ShockHash2 {
 
         // For each bucket size, the Golomb-Rice parameter (upper 8 bits) and the number of bits to
         // skip in the fixed part of the tree (lower 24 bits).
-        static constexpr array<uint32_t, MAX_BUCKET_SIZE> memo = fill_golomb_rice2<LEAF_SIZE>();
+        static constexpr array<uint64_t, MAX_BUCKET_SIZE> memo = fill_golomb_rice2<LEAF_SIZE>();
 
         size_t bucket_size;
         size_t nbuckets;
@@ -287,6 +291,7 @@ class ShockHash2 {
                 // End: difference to RecSplit.
 
                 const auto log2golomb = golomb_param(m);
+                assert(log2golomb > 0);
                 builder.appendFixed(x, log2golomb);
                 unary.push_back(x >> log2golomb);
 
