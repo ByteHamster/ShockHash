@@ -1,554 +1,425 @@
 #pragma once
+/*
+ * Based on RecSplit, Copyright (C) 2019-2020 Emmanuel Esposito and Sebastiano Vigna
+ * Enhanced to use overloaded cuckoo hash tables in the leaves.
+ * For tiny space usages (~1.6 bit/object), ShockHash is faster than RecSplit.
+ */
 
-#include <cmath>
-#include <array>
-#include <vector>
-#include <variant>
-#include <unordered_map>
-#include <iostream>
-#include <algorithm>
-#include <TinyBinaryCuckooHashTable.h>
-#include <UnionFind.h>
-#include "PairingFunction.h"
-#include "CuckooUnionFind.h"
+#include "ShockHash.h"
+#include "ShockHash2-internal.h"
 
-template <size_t leafSize, bool filter = false>
-struct SeedCache {
-    [[no_unique_address]]
-    std::conditional_t<filter, __uint128_t, std::monostate> isolatedVertices;
-    uint64_t seed;
-    uint8_t hashes[leafSize];
+namespace shockhash {
+/*static const int MAX_LEAF_SIZE2 = 60;
+
+// Optimal Golomb-Rice parameters for leaves.
+static constexpr uint8_t bij_memo2[MAX_LEAF_SIZE2 + 1] = {
+        0,  0,  0,  0,  0,  0,  1,  1,  2,  2, // 0..9
+        2,  3,  3,  4,  4,  4,  5,  5,  6,  6, // 10..19
+        7,  7,  8,  8,  9,  9,  9, 10, 10, 10, // 20..29
+        12, 12, 13, 13, 14, 14, 14, 15, 16, 16, // 30..39
+        16, 17, 17, 17, 18, 18, 19, 19, 20, 20, // 40..49
+        20, 21, 21, 21, 22, 22, 23, 23, 24, 24, // 50..59
+        24 // 60
 };
 
-template <size_t leafSize>
-inline void calculateIsolatedVertices(SeedCache<leafSize, true> &seedCache) {
-    seedCache.isolatedVertices = 0;
-    uint64_t hitCount[leafSize] = {0};
-    for (size_t i = 0; i < leafSize; i++) {
-        hitCount[seedCache.hashes[i]]++;
-    }
-    for (size_t i = 0; i < leafSize; i++) {
-        if (hitCount[seedCache.hashes[i]] == 1) {
-            seedCache.isolatedVertices |= __uint128_t(1) << i;
-        }
-    }
-
-    /*__uint128_t hitCount1 = 0;
-    __uint128_t hitCountMoreThan1 = 0;
-    for (size_t i = 0; i < leafSize; i++) {
-        // hitCount[seedCache.hashes[i]]++;
-        __uint128_t pos = __uint128_t(1) << seedCache.hashes[i];
-        hitCountMoreThan1 |= (hitCount1 & pos);
-        hitCount1 |= pos;
-    }
-    __uint128_t isolated = 0;
-    for (size_t i = 0; i < leafSize; i++) {
-        //if (hitCount[seedCache.hashes[i]] == 1) {
-        //    seedCache.isolatedVertices |= __uint128_t(1) << i;
-        //}
-        __uint128_t pos = __uint128_t(1) << seedCache.hashes[i];
-        if ((((~hitCount1) | hitCountMoreThan1) & pos) == 0) {
-            isolated |= __uint128_t(1) << i;
-        }
-    }
-    seedCache.isolatedVertices = isolated;*/
+template <size_t LEAF_SIZE> static constexpr array<uint32_t, MAX_BUCKET_SIZE> fill_golomb_rice2() {
+    array<uint32_t, MAX_BUCKET_SIZE> memo{0};
+    size_t s = 0;
+    for (; s <= LEAF_SIZE; ++s) memo[s] = bij_memo2[s] << 27 | (s > 1) << 16 | bij_memo[s];
+    for (; s < MAX_BUCKET_SIZE; ++s) _fill_golomb_rice<LEAF_SIZE>(s, &memo);
+    return memo;
 }
 
-template <size_t leafSize, bool filter = false>
-class BasicSeedCandidateFinder {
-    private:
-        const std::vector<uint64_t> &keys;
-        size_t currentSeed = 0;
+template <size_t LEAF_SIZE> class SplittingStrategy2 {
     public:
-        explicit BasicSeedCandidateFinder(const std::vector<uint64_t> &keys) : keys(keys) {
+        static constexpr size_t _leaf = LEAF_SIZE;
+        static_assert(_leaf >= 1);
+        static_assert(_leaf <= MAX_LEAF_SIZE2);
+        static constexpr size_t lower_aggr = _leaf * (_leaf > 24 ? 4 : 2);
+        static constexpr size_t upper_aggr = lower_aggr * (_leaf > 24 ? 3 : 2);
+};*/
 
-        }
+template <size_t LEAF_SIZE>
+class ShockHash2 {
+        static_assert(LEAF_SIZE <= MAX_LEAF_SIZE);
+        static constexpr AllocType AT = sux::util::AllocType::MALLOC;
+        static constexpr size_t _leaf = LEAF_SIZE;
+        static constexpr size_t lower_aggr = SplittingStrategy<LEAF_SIZE>::lower_aggr;
+        static constexpr size_t upper_aggr = SplittingStrategy<LEAF_SIZE>::upper_aggr;
 
-        inline SeedCache<leafSize, filter> next() {
-            constexpr uint64_t mask = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
-            SeedCache<leafSize, filter> seedCache; // NOLINT(cppcoreguidelines-pro-type-member-init)
-            while (true) {
-                uint64_t taken = 0;
-                for (size_t i = 0; i < leafSize; i++) {
-                    uint64_t hash = util::remix(keys.at(i) + currentSeed);
-                    seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    taken |= 1ul << seedCache.hashes[i];
-                }
-                if (taken == mask) {
-                    // Found a new seed candidate
-                    seedCache.seed = currentSeed;
-                    if constexpr (filter) {
-                        calculateIsolatedVertices(seedCache);
-                    }
-                    currentSeed++;
-                    return seedCache;
-                }
-                currentSeed++;
+        // For each bucket size, the Golomb-Rice parameter (upper 8 bits) and the number of bits to
+        // skip in the fixed part of the tree (lower 24 bits).
+        static constexpr array<uint32_t, MAX_BUCKET_SIZE> memo = fill_golomb_rice<LEAF_SIZE>();
+
+        size_t bucket_size;
+        size_t nbuckets;
+        size_t keys_count;
+        RiceBitVector<AT> descriptors;
+        DoubleEF<AT> ef;
+        using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
+        Ribbon *ribbon = nullptr;
+        std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
+
+    public:
+        ShockHash2() {}
+
+
+        ShockHash2(const vector<string> &keys, const size_t bucket_size) {
+            this->bucket_size = bucket_size;
+            this->keys_count = keys.size();
+            hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
+            for (size_t i = 0; i < this->keys_count; ++i) {
+                h[i] = first_hash(keys[i].c_str(), keys[i].size());
             }
+            hash_gen(h);
+            free(h);
         }
 
-        static size_t hash(uint64_t key, uint64_t seed) {
-            return util::fastrange64(util::remix(key + seed), (leafSize + 1) / 2);
+        ShockHash2(vector<hash128_t> &keys, const size_t bucket_size) {
+            this->bucket_size = bucket_size;
+            this->keys_count = keys.size();
+            hash_gen(&keys[0]);
         }
-};
 
-template <size_t leafSize, bool filter = false>
-class RotatingSeedCandidateFinder {
-    private:
-        std::array<uint64_t, leafSize> keys = { 0 };
-        uint64_t sizeSetA = 0;
-        size_t currentSeed = -1;
-        size_t currentRotation = (leafSize + 1) / 2;
-        uint64_t takenA = 0;
-        uint64_t takenB = 0;
-        SeedCache<leafSize, filter> seedCache; // NOLINT(cppcoreguidelines-pro-type-member-init)
-    public:
-        explicit RotatingSeedCandidateFinder(const std::vector<uint64_t> &keysIn) {
-            for (size_t i = 0; i < leafSize; i++) {
-                if ((keysIn[i] & 1) == 0) {
-                    keys.at(sizeSetA) = keysIn[i];
-                    sizeSetA++;
+        /** Returns the value associated with the given 128-bit hash.
+         *
+         * Note that this method is mainly useful for benchmarking.
+         * @param hash a 128-bit hash.
+         * @return the associated value.
+         */
+        size_t operator()(const hash128_t &hash) {
+            const size_t bucket = hash128_to_bucket(hash);
+            uint64_t cum_keys, cum_keys_next, bit_pos;
+            ef.get(bucket, cum_keys, cum_keys_next, bit_pos);
+
+            // Number of keys in this bucket
+            size_t m = cum_keys_next - cum_keys;
+            auto reader = descriptors.reader();
+            reader.readReset(bit_pos, skip_bits(m));
+            int level = 0;
+
+            while (m > upper_aggr) { // fanout = 2
+                const auto d = reader.readNext(golomb_param(m));
+                const size_t hmod = sux::remap16(sux::function::remix(hash.second + d + start_seed[level]), m);
+
+                const uint32_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
+                if (hmod < split) {
+                    m = split;
                 } else {
-                    keys.at(leafSize - i + sizeSetA - 1) = keysIn[i];
+                    reader.skipSubtree(skip_nodes(split), skip_bits(split));
+                    m -= split;
+                    cum_keys += split;
                 }
+                level++;
             }
-        }
+            if (m > lower_aggr) {
+                const auto d = reader.readNext(golomb_param(m));
+                const size_t hmod = sux::remap16(sux::function::remix(hash.second + d + start_seed[level]), m);
 
-        static constexpr uint64_t rotate(uint64_t val, uint32_t x) {
-            constexpr uint64_t l = (leafSize + 1) / 2;
-            return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
-        }
-
-        inline SeedCache<leafSize, filter> next() {
-            constexpr uint64_t mask = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
-            while (true) {
-                while (currentRotation < (leafSize + 1) / 2) {
-                    if ((takenA | rotate(takenB, currentRotation)) == mask) {
-                        // Found a new seed candidate
-                        SeedCache<leafSize, filter> rotated = seedCache;
-                        rotated.seed = currentSeed * ((leafSize + 1) / 2) + currentRotation;
-                        for (size_t i = sizeSetA; i < leafSize; i++) {
-                            rotated.hashes[i] = (rotated.hashes[i] + currentRotation) % ((leafSize + 1) / 2);
-                        }
-                        if constexpr (filter) {
-                            calculateIsolatedVertices(rotated);
-                        }
-                        currentRotation++;
-                        return rotated;
-                    }
-                    currentRotation++;
-                }
-                currentRotation = 0;
-                currentSeed++;
-
-                takenA = 0;
-                takenB = 0;
-                for (size_t i = 0; i < sizeSetA; i++) {
-                    uint64_t hash = util::remix(keys[i] + currentSeed);
-                    seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    takenA |= 1ul << seedCache.hashes[i];
-                }
-                for (size_t i = sizeSetA; i < leafSize; i++) {
-                    uint64_t hash = util::remix(keys[i] + currentSeed);
-                    seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    takenB |= 1ul << seedCache.hashes[i];
-                }
+                const int part = uint16_t(hmod) / lower_aggr;
+                m = min(lower_aggr, m - part * lower_aggr);
+                cum_keys += lower_aggr * part;
+                if (part) reader.skipSubtree(skip_nodes(lower_aggr) * part, skip_bits(lower_aggr) * part);
+                level++;
             }
+
+            if (m > _leaf) {
+                const auto d = reader.readNext(golomb_param(m));
+                const size_t hmod = sux::remap16(sux::function::remix(hash.second + d + start_seed[level]), m);
+
+                const int part = uint16_t(hmod) / _leaf;
+                m = min(_leaf, m - part * _leaf);
+                cum_keys += _leaf * part;
+                if (part) reader.skipSubtree(part, skip_bits(_leaf) * part);
+                level++;
+            }
+
+            const auto b = reader.readNext(golomb_param(m));
+
+            // Begin: difference to RecSplit.
+            return cum_keys + dispatchLeafSizeQ<LEAF_SIZE>(m, b, hash.second, ribbon->retrieve(hash.second));
+            // End: difference to RecSplit.
         }
 
-        static size_t hash(uint64_t key, uint64_t seed) {
-            size_t hashSeed = seed / ((leafSize + 1) / 2);
-            size_t rotation = seed % ((leafSize + 1) / 2);
-            size_t baseHash = util::fastrange64(util::remix(key + hashSeed), (leafSize + 1) / 2);
-            if ((key & 1) == 0) {
-                return baseHash;
+        template <size_t I>
+        inline size_t dispatchLeafSizeQ(size_t param, size_t seed, uint64_t key, size_t retrieved) {
+            if constexpr (I <= 1) {
+                return 0;
+            } else if (I == param) {
+                using SH = std::conditional_t<I >= 10,
+                        BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
+                        BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
+                return SH::hash(seed, key, retrieved);
             } else {
-                return (baseHash + rotation) % ((leafSize + 1) / 2);
+                return dispatchLeafSizeQ<I - 1>(param, seed, key, retrieved);
             }
         }
-};
 
-template <size_t leafSize>
-class CandidateList {
+        /** Returns the value associated with the given key.
+         *
+         * @param key a key.
+         * @return the associated value.
+         */
+        size_t operator()(const string &key) { return operator()(first_hash(key.c_str(), key.size())); }
+
+        /** Returns the number of keys used to build this RecSplit instance. */
+        inline size_t size() { return this->keys_count; }
+
+        /** Returns an estimate of the size in bits of this structure. */
+        size_t getBits() {
+            return ef.bitCountCumKeys() + ef.bitCountPosition()
+                    + descriptors.getBits() + 8 * ribbon->size() + 8 * sizeof(ShockHash2);
+        }
+
+        void printBits() {
+            std::cout<<"EF 1:   "<<(double)ef.bitCountCumKeys()/keys_count<<std::endl;
+            std::cout<<"EF 2:   "<<(double)ef.bitCountPosition()/keys_count<<std::endl;
+            std::cout<<"trees:  "<<(double)descriptors.getBits()/keys_count<<std::endl;
+            std::cout<<"ribbon: "<<(double)(8 * ribbon->size())/keys_count<<std::endl;
+        }
+
     private:
-        static constexpr uint64_t ALL_SET = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
-        std::vector<uint64_t> candidates;
-    public:
-        explicit CandidateList(size_t expectedNumSeeds) {
-            candidates.reserve(expectedNumSeeds);
+        // Maps a 128-bit to a bucket using the first 64-bit half.
+        inline uint64_t hash128_to_bucket(const hash128_t &hash) const { return remap128(hash.first, nbuckets); }
+
+        // Computes and stores the splittings and bijections of a bucket.
+        void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary,
+                      TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
+            const auto m = bucket.size();
+            vector<uint64_t> temp(m);
+            recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0, tinyBinaryCuckooHashTable);
         }
 
-        inline void add(size_t seed, uint64_t mask) {
-            assert(seed == candidates.size());
-            candidates.emplace_back(mask);
-        }
-
-        struct IteratorType {
-            const CandidateList &candidateList;
-            size_t currentIdx = -1;
-            size_t size = 0;
-            uint64_t filterMask;
-            bool isEnd;
-
-            IteratorType(const CandidateList &candidateList, uint64_t filterMask, bool isEnd)
-                : candidateList(candidateList), filterMask(filterMask), isEnd(isEnd) {
-                size = candidateList.candidates.size();
-                if (!isEnd) {
-                    operator++(); // Initialized with -1, go to first actual item
-                }
-            }
-
-            inline bool operator!=(IteratorType rhs) const {
-                return isEnd != rhs.isEnd;
-            }
-
-            inline std::pair<size_t, uint64_t> operator*() const {
-                uint64_t mask = candidateList.candidates.at(currentIdx);
-                return std::make_pair(currentIdx, mask);
-            }
-
-            inline IteratorType& operator++() {
-                ++currentIdx;
-                while (currentIdx < size) {
-                    if ((candidateList.candidates[currentIdx] | filterMask) == ALL_SET) {
-                        return *this;
-                    }
-                    ++currentIdx;
-                }
-                isEnd = true;
-                return *this;
-            }
-        };
-
-        struct FilteredListType {
-            const CandidateList &candidateList;
-            uint64_t mask;
-
-            FilteredListType(CandidateList &candidateList, uint64_t mask)
-                : candidateList(candidateList), mask(mask) {
-            }
-
-            inline IteratorType begin() const {
-                return IteratorType(candidateList, mask, false);
-            }
-
-            inline IteratorType end() const {
-                return IteratorType(candidateList, mask, true);
-            }
-        };
-
-        FilteredListType filter(uint64_t mask) {
-            return FilteredListType(*this, mask);
-        }
-};
-
-template <size_t leafSize>
-class CandidateTree {
-    private:
-        static constexpr uint64_t ALL_SET = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
-        static constexpr uint64_t BUCKET_MASK = 0b11111;
-        std::array<std::vector<uint64_t>, BUCKET_MASK + 1> candidateMasks;
-        std::array<std::vector<uint64_t>, BUCKET_MASK + 1> candidateSeeds;
-    public:
-        explicit CandidateTree(size_t expectedNumSeeds) {
-            size_t toReserve = expectedNumSeeds / candidateSeeds.size();
-            for (size_t i = 0; i < candidateSeeds.size(); i++) {
-                candidateSeeds[i].reserve(toReserve);
-                candidateMasks[i].reserve(toReserve);
-            }
-        }
-
-        inline void add(size_t seed, uint64_t mask) {
-            candidateMasks[mask & BUCKET_MASK].emplace_back(mask);
-            candidateSeeds[mask & BUCKET_MASK].emplace_back(seed);
-        }
-
-        struct IteratorType {
-            const CandidateTree &candidateTree;
-            size_t currentBucket = 0;
-            size_t currentIdx = -1;
-            uint64_t filterMask;
-            uint64_t filterMaskRestrictedToBucketMask;
-            bool isEnd;
-            size_t currentBucketSize;
-
-            inline void nextRelevantBucket() {
-                while ((filterMaskRestrictedToBucketMask | currentBucket) < BUCKET_MASK) {
-                    currentBucket++;
-                }
-                if ((filterMaskRestrictedToBucketMask | currentBucket) < BUCKET_MASK && currentBucket <= BUCKET_MASK) {
-                    currentBucket++;
-                }
-            }
-
-            IteratorType(const CandidateTree &candidateTree, uint64_t filterMask, bool isEnd)
-                    : candidateTree(candidateTree), filterMask(filterMask),
-                      filterMaskRestrictedToBucketMask(filterMask & BUCKET_MASK), isEnd(isEnd) {
-                if (!isEnd) {
-                    nextRelevantBucket();
-                    currentBucketSize = candidateTree.candidateMasks[currentBucket].size();
-                    operator++(); // Initialized with -1, go to first actual item
-                }
-            }
-
-            inline bool operator!=(IteratorType rhs) const {
-                return isEnd != rhs.isEnd;
-            }
-
-            inline std::pair<size_t, uint64_t> operator*() const {
-                return std::make_pair(candidateTree.candidateSeeds[currentBucket][currentIdx],
-                                      candidateTree.candidateMasks[currentBucket][currentIdx]);
-            }
-
-            inline IteratorType& operator++() {
-                ++currentIdx;
-                while (currentBucket <= BUCKET_MASK) {
-                    while (currentIdx < currentBucketSize) {
-                        if ((candidateTree.candidateMasks[currentBucket][currentIdx] | filterMask) == ALL_SET) {
-                            return *this;
-                        }
-                        ++currentIdx;
-                    }
-                    currentBucket++;
-                    nextRelevantBucket();
-                    currentBucketSize = candidateTree.candidateMasks[currentBucket].size();
-                    currentIdx = 0;
-                }
-                isEnd = true;
-                return *this;
-            }
-        };
-
-        struct FilteredListType {
-            const CandidateTree &candidateTree;
-            uint64_t mask;
-
-            FilteredListType(CandidateTree &candidateTree, uint64_t mask)
-                    : candidateTree(candidateTree), mask(mask) {
-            }
-
-            inline IteratorType begin() const {
-                return IteratorType(candidateTree, mask, false);
-            }
-
-            inline IteratorType end() const {
-                return IteratorType(candidateTree, mask, true);
-            }
-        };
-
-        FilteredListType filter(uint64_t mask) {
-            return FilteredListType(*this, mask);
-        }
-};
-
-template <template<size_t> typename CandidateList, size_t leafSize, bool filter = false>
-class QuadSplitCandidateFinder {
-    private:
-        static constexpr double E_HALF = 1.359140914;
-        std::array<uint64_t, leafSize> keys = { 0 };
-        uint64_t sizeSetA = 0;
-        size_t currentSeed = -1;
-        CandidateList<leafSize> candidatesA;
-        CandidateList<leafSize> candidatesB;
-        std::vector<SeedCache<leafSize, filter>> extractedCandidates;
-    public:
-        explicit QuadSplitCandidateFinder(const std::vector<uint64_t> &keysIn)
-                : candidatesA(std::pow(E_HALF, keysIn.size() / 2)), candidatesB(std::pow(E_HALF, keysIn.size() / 2)) {
-            for (size_t i = 0; i < leafSize; i++) {
-                if ((keysIn[i] & 1) == 0) {
-                    keys.at(sizeSetA) = keysIn[i];
-                    sizeSetA++;
-                } else {
-                    keys.at(leafSize - i + sizeSetA - 1) = keysIn[i];
-                }
-            }
-        }
-
-        inline SeedCache<leafSize, filter> next() {
-            while (extractedCandidates.empty()) {
-                prepareNextSeed();
-            }
-            SeedCache<leafSize, filter> seedCache = extractedCandidates.back(); // Smallest seed is in the back
-            extractedCandidates.pop_back();
-            return seedCache;
-        }
-
-        inline SeedCache<leafSize, filter> makeCache(size_t seedA, size_t seedB) {
-            SeedCache<leafSize, filter> cache = {};
-            cache.seed = pairElegant(seedA, seedB);
-            for (size_t i = 0; i < sizeSetA; i++) {
-                uint64_t hash = util::remix(keys[i] + seedA);
-                cache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-            }
-            for (size_t i = sizeSetA; i < leafSize; i++) {
-                uint64_t hash = util::remix(keys[i] + seedB);
-                cache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-            }
-            if constexpr (filter) {
-                calculateIsolatedVertices(cache);
-            }
-            return cache;
-        }
-
-        void prepareNextSeed() {
-            currentSeed++;
-
-            uint64_t takenA = 0;
-            uint64_t takenB = 0;
-            for (size_t i = 0; i < sizeSetA; i++) {
-                uint64_t hash = util::remix(keys[i] + currentSeed);
-                takenA |= 1ul << util::fastrange64(hash, (leafSize + 1) / 2);
-            }
-            for (size_t i = sizeSetA; i < leafSize; i++) {
-                uint64_t hash = util::remix(keys[i] + currentSeed);
-                takenB |= 1ul << util::fastrange64(hash, (leafSize + 1) / 2);
-            }
-
-            for (const auto [candidateSeed, candidateMask] : candidatesA.filter(takenB)) {
-                if (isFloatAccurateElegant(candidateSeed, currentSeed)) {
-                    extractedCandidates.push_back(makeCache(candidateSeed, currentSeed));
-                } else {
-                    std::cout << "Skipped seed because of floating point inaccuracy" << std::endl;
-                }
-            }
-            candidatesA.add(currentSeed, takenA); // add after iterating, so we don't test the same seed combination twice
-            candidatesB.add(currentSeed, takenB);
-            for (const auto [candidateSeed, candidateMask] : candidatesB.filter(takenA)) {
-                if (isFloatAccurateElegant(currentSeed, candidateSeed)) {
-                    extractedCandidates.push_back(makeCache(currentSeed, candidateSeed));
-                } else {
-                    std::cout << "Skipped seed because of floating point inaccuracy" << std::endl;
-                }
-            }
-            if (extractedCandidates.size() > 1) {
-                // Smallest seed is in the back
-                std::sort(extractedCandidates.begin(), extractedCandidates.end(),
-                          [](const SeedCache<leafSize, filter> &a, const SeedCache<leafSize, filter> &b) {
-                              return a.seed > b.seed; });
-            }
-        }
-
-        static size_t hash(uint64_t key, uint64_t seed) {
-            auto [seedA, seedB] = unpairElegant(seed);
-            if ((key & 1) == 0) {
-                return util::fastrange64(util::remix(key + seedA), (leafSize + 1) / 2);
+        template <size_t I>
+        inline size_t dispatchLeafSize(size_t param, std::vector<uint64_t> &leafKeys) {
+            if constexpr (I <= 1) {
+                return 0;
+            } else if (I == param) {
+                using SH = std::conditional_t<I >= 10,
+                        BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
+                        BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
+                size_t x = SH::findSeed(leafKeys);
+                SH::constructRetrieval(leafKeys, x, ribbonInput);
+                SH().calculateBijection(leafKeys);
+                return x;
             } else {
-                return util::fastrange64(util::remix(key + seedB), (leafSize + 1) / 2);
+                return dispatchLeafSize<I - 1>(param, leafKeys);
             }
+        }
+
+        void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end,
+                      typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level,
+                      TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
+            const auto m = end - start;
+            assert(m > 1);
+            uint64_t x = start_seed[level];
+
+            if (m <= _leaf) {
+#ifdef STATS
+                auto start_time = high_resolution_clock::now();
+#endif
+                // Begin: difference to RecSplit.
+                std::vector<uint64_t> leafKeys(bucket.begin() + start, bucket.begin() + end);
+                x = dispatchLeafSize<LEAF_SIZE>(m, leafKeys);
+                // End: difference to RecSplit.
+
+                const auto log2golomb = golomb_param(m);
+                builder.appendFixed(x, log2golomb);
+                unary.push_back(x >> log2golomb);
+
+#ifdef STATS
+                bij_unary += 1 + (x >> log2golomb);
+                bij_fixed += log2golomb;
+                time_bij += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                bij_opt += log2(x + 1);
+#endif
+            } else {
+#ifdef STATS
+                auto start_time = high_resolution_clock::now();
+#endif
+                if (m > upper_aggr) { // fanout = 2
+                    const size_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
+
+                    size_t count[2];
+                    for (;;) {
+                        count[0] = 0;
+                        for (size_t i = start; i < end; i++) {
+                            count[remap16(sux::function::remix(bucket[i] + x), m) >= split]++;
+                        }
+                        if (count[0] == split) break;
+                        x++;
+                    }
+
+                    count[0] = 0;
+                    count[1] = split;
+                    for (size_t i = start; i < end; i++) {
+                        temp[count[remap16(sux::function::remix(bucket[i] + x), m) >= split]++] = bucket[i];
+                    }
+                    copy(&temp[0], &temp[m], &bucket[start]);
+                    x -= start_seed[level];
+                    const auto log2golomb = golomb_param(m);
+                    builder.appendFixed(x, log2golomb);
+                    unary.push_back(x >> log2golomb);
+
+#ifdef STATS
+                    time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                    split_opt += log2(x + 1);
+#endif
+                    recSplit(bucket, temp, start, start + split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    if (m - split > 1) recSplit(bucket, temp, start + split, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                } else if (m > lower_aggr) { // 2nd aggregation level
+                    const size_t fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
+                    size_t count[fanout]; // Note that we never read count[fanout-1]
+                    for (;;) {
+                        memset(count, 0, sizeof count - sizeof *count);
+                        for (size_t i = start; i < end; i++) {
+                            count[uint16_t(remap16(sux::function::remix(bucket[i] + x), m)) / lower_aggr]++;
+                        }
+                        size_t broken = 0;
+                        for (size_t i = 0; i < fanout - 1; i++) broken |= count[i] - lower_aggr;
+                        if (!broken) break;
+                        x++;
+                    }
+
+                    for (size_t i = 0, c = 0; i < fanout; i++, c += lower_aggr) count[i] = c;
+                    for (size_t i = start; i < end; i++) {
+                        temp[count[uint16_t(sux::function::remap16(sux::function::remix(bucket[i] + x), m)) / lower_aggr]++] = bucket[i];
+                    }
+                    copy(&temp[0], &temp[m], &bucket[start]);
+
+                    x -= start_seed[level];
+                    const auto log2golomb = golomb_param(m);
+                    builder.appendFixed(x, log2golomb);
+                    unary.push_back(x >> log2golomb);
+
+#ifdef STATS
+                    time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                    split_opt += log2(x + 1);
+#endif
+                    size_t i;
+                    for (i = 0; i < m - lower_aggr; i += lower_aggr) {
+                        recSplit(bucket, temp, start + i, start + i + lower_aggr, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    }
+                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                } else { // First aggregation level, m <= lower_aggr
+                    const size_t fanout = uint16_t(m + _leaf - 1) / _leaf;
+                    size_t count[fanout]; // Note that we never read count[fanout-1]
+                    for (;;) {
+                        memset(count, 0, sizeof count - sizeof *count);
+                        for (size_t i = start; i < end; i++) {
+                            count[uint16_t(remap16(sux::function::remix(bucket[i] + x), m)) / _leaf]++;
+                        }
+                        size_t broken = 0;
+                        for (size_t i = 0; i < fanout - 1; i++) broken |= count[i] - _leaf;
+                        if (!broken) break;
+                        x++;
+                    }
+                    for (size_t i = 0, c = 0; i < fanout; i++, c += _leaf) count[i] = c;
+                    for (size_t i = start; i < end; i++) {
+                        temp[count[uint16_t(remap16(sux::function::remix(bucket[i] + x), m)) / _leaf]++] = bucket[i];
+                    }
+                    copy(&temp[0], &temp[m], &bucket[start]);
+
+                    x -= start_seed[level];
+                    const auto log2golomb = golomb_param(m);
+                    builder.appendFixed(x, log2golomb);
+                    unary.push_back(x >> log2golomb);
+
+#ifdef STATS
+                    time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
+                    split_opt += log2(x + 1);
+#endif
+                    size_t i;
+                    for (i = 0; i < m - _leaf; i += _leaf) {
+                        recSplit(bucket, temp, start + i, start + i + _leaf, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    }
+                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                }
+#ifdef STATS
+                const auto log2golomb = golomb_param(m);
+                split_unary += 1 + (x >> log2golomb);
+                split_fixed += log2golomb;
+#endif
+            }
+        }
+
+        void hash_gen(hash128_t *hashes) {
+#ifdef STATS
+            split_unary = split_fixed = 0;
+            bij_unary = bij_fixed = 0;
+            time_bij = 0;
+            memset(time_split, 0, sizeof time_split);
+#endif
+
+#ifndef __SIZEOF_INT128__
+            if (keys_count > (1ULL << 32)) {
+			fprintf(stderr, "For more than 2^32 keys, you need 128-bit integer support.\n");
+			abort();
+		}
+#endif
+            nbuckets = max(1, (keys_count + bucket_size - 1) / bucket_size);
+            auto bucket_size_acc = vector<int64_t>(nbuckets + 1);
+            auto bucket_pos_acc = vector<int64_t>(nbuckets + 1);
+            TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
+            ribbonInput.reserve(keys_count);
+
+            sort_hash128_t(hashes, keys_count);
+            typename RiceBitVector<AT>::Builder builder;
+
+            bucket_size_acc[0] = bucket_pos_acc[0] = 0;
+            for (size_t i = 0, last = 0; i < nbuckets; i++) {
+                vector<uint64_t> bucket;
+                for (; last < keys_count && hash128_to_bucket(hashes[last]) == i; last++) bucket.push_back(hashes[last].second);
+
+                const size_t s = bucket.size();
+                bucket_size_acc[i + 1] = bucket_size_acc[i] + s;
+                if (bucket.size() > 1) {
+                    vector<uint32_t> unary;
+                    recSplit(bucket, builder, unary, tinyBinaryCuckooHashTable);
+                    builder.appendUnaryAll(unary);
+                }
+                bucket_pos_acc[i + 1] = builder.getBits();
+            }
+            builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
+            descriptors = builder.build();
+            ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
+
+            // Begin: difference to RecSplit.
+            ribbon = new Ribbon(ribbonInput);
+            ribbonInput.clear();
+            // End: difference to RecSplit.
+
+#ifdef STATS
+            // Evaluation purposes only
+            double ef_sizes = (double)ef.bitCountCumKeys() / keys_count;
+            double ef_bits = (double)ef.bitCountPosition() / keys_count;
+            double rice_desc = (double)builder.getBits() / keys_count;
+            double retrieval = 8.0 * (double)ribbon->size() / keys_count;
+            printf("Elias-Fano cumul sizes:  %f bits/bucket\n", (double)ef.bitCountCumKeys() / nbuckets);
+            printf("Elias-Fano cumul bits:   %f bits/bucket\n", (double)ef.bitCountPosition() / nbuckets);
+            printf("Elias-Fano cumul sizes:  %f bits/key\n", ef_sizes);
+            printf("Elias-Fano cumul bits:   %f bits/key\n", ef_bits);
+            printf("Rice-Golomb descriptors: %f bits/key\n", rice_desc);
+            printf("Retrieval:               %f bits/key\n", retrieval);
+            printf("Total bits:              %f bits/key\n", ef_sizes + ef_bits + rice_desc + retrieval);
+
+            printf("Split bits:       %16.3f\n", ((double)split_fixed + split_unary) / keys_count);
+            printf("Split bits opt:   %16.3f\n", split_opt / keys_count);
+            printf("Bij bits:         %16.3f\n", ((double)bij_fixed + bij_unary) / keys_count);
+            printf("Bij bits opt:     %16.3f\n", bij_opt / keys_count);
+
+            printf("\n");
+            printf("Bijections: %13.3f ms\n", time_bij * 1E-6);
+            //for (size_t i = 0; i <= LEAF_SIZE; i++) {
+            //    printf("Bijections of size %d:    %d\n", i, bij_count[i]);
+            //}
+            for (int i = 0; i < MAX_LEVEL_TIME; i++) {
+                if (time_split[i] > 0) {
+                    printf("Split level %d: %10.3f ms\n", i, time_split[i] * 1E-6);
+                }
+            }
+#endif
         }
 };
 
-template <size_t leafSize, bool filter>
-using QuadSplitCandidateFinderList = QuadSplitCandidateFinder<CandidateList, leafSize, filter>;
-
-template <size_t leafSize, bool filter>
-using QuadSplitCandidateFinderTree = QuadSplitCandidateFinder<CandidateTree, leafSize, filter>;
-
-/**
- * ShockHash2 base case.
- * Note that while this can be used with uneven leaf sizes, it achieves suboptimal space and time.
- */
-template <size_t leafSize, bool filter = false,
-        template<size_t, bool> typename SeedCandidateFinder = BasicSeedCandidateFinder>
-class BijectionsShockHash2 {
-    public:
-        inline size_t findSeed(const std::vector<uint64_t> &keys) {
-            SeedCandidateFinder<leafSize, filter> seedCandidateFinder(keys);
-            std::vector<SeedCache<leafSize, filter>> seedsCandidates;
-            seedsCandidates.push_back(seedCandidateFinder.next());
-            CuckooUnionFind unionFind(leafSize);
-            while (true) {
-                const SeedCache<leafSize, filter> newCandidate = seedCandidateFinder.next();
-                SeedCache<leafSize, filter> newCandidateShifted = newCandidate;
-                for (size_t i = 0; i < leafSize; i++) {
-                    newCandidateShifted.hashes[i] += leafSize/2;
-                }
-                for (const SeedCache<leafSize, filter> &other : seedsCandidates) {
-                    if constexpr (filter) {
-                        if ((other.isolatedVertices & newCandidate.isolatedVertices) != 0) {
-                            continue;
-                        }
-                    }
-                    size_t i = 0;
-                    unionFind.clear();
-                    for (; i < leafSize; i++) {
-                        size_t end1 = other.hashes[i];
-                        size_t end2 = newCandidateShifted.hashes[i];
-                        if (!unionFind.unionIsStillPseudoforest(end1, end2)) {
-                            break;
-                        }
-                    }
-                    if (i != leafSize) {
-                        continue;
-                    }
-
-                    // Found working seed!
-                    uint64_t seed1 = newCandidate.seed;
-                    uint64_t seed2 = other.seed;
-                    uint64_t fullSeed = pairTriangular(seed1, seed2);
-
-                    if (!isFloatAccurateTriangular(seed1, seed2)) {
-                        std::cout << "Skipped seed because of floating point inaccuracy" << std::endl;
-                        continue;
-                    }
-                    return fullSeed;
-                }
-                seedsCandidates.push_back(newCandidate);
-            }
-            return 0;
-        }
-
-        inline void constructRetrieval(const std::vector<uint64_t> &keys, size_t seed,
-                                       std::vector<std::pair<uint64_t, uint8_t>> &retrieval) {
-            auto [seed1, seed2] = unpairTriangular(seed);
-            shockhash::TinyBinaryCuckooHashTable table(leafSize);
-            for (uint64_t key : keys) {
-                table.prepare(shockhash::HashedKey(key));
-            }
-            table.clearPlacement();
-            for (size_t k = 0; k < leafSize; k++) {
-                shockhash::TinyBinaryCuckooHashTable::CandidateCells candidateCells;
-                candidateCells.cell1 = SeedCandidateFinder<leafSize, filter>::hash(table.heap[k].hash.mhc, seed1) + leafSize/2;
-                candidateCells.cell2 = SeedCandidateFinder<leafSize, filter>::hash(table.heap[k].hash.mhc, seed2);
-                if (!table.insert(&table.heap[k], candidateCells)) {
-                    throw std::logic_error("Should be possible to construct");
-                }
-            }
-            for (size_t k = 0; k < leafSize; k++) {
-                size_t candidate2 = SeedCandidateFinder<leafSize, filter>::hash(table.heap[k].hash.mhc, seed2);
-                if (table.cells[candidate2] == &table.heap[k]) {
-                    retrieval.emplace_back(table.heap[k].hash.mhc, 1);
-                } else {
-                    size_t candidate1 = SeedCandidateFinder<leafSize, filter>::hash(table.heap[k].hash.mhc, seed1) + leafSize/2;
-                    assert(table.cells[candidate1] == &table.heap[k]);
-                    retrieval.emplace_back(table.heap[k].hash.mhc, 0);
-                }
-            }
-        }
-
-        inline double calculateBijection(const std::vector<uint64_t> &keys) {
-            size_t seed = findSeed(keys);
-            // Begin: Validity check
-            #ifndef NDEBUG
-                std::unordered_map<uint64_t, uint8_t> retrieval;
-                constructRetrieval(keys, seed, retrieval);
-
-                auto [seed1, seed2] = unpairTriangular(seed);
-                std::vector<bool> taken(leafSize, false);
-                for (uint64_t key : keys) {
-                    size_t hashValue;
-                    if (retrieval.at(key) == 0) {
-                        hashValue = SeedCandidateFinder<leafSize, filter>::hash(key, seed1) + leafSize/2;
-                    } else {
-                        hashValue = SeedCandidateFinder<leafSize, filter>::hash(key, seed2);
-                    }
-                    if (taken[hashValue]) {
-                        throw std::logic_error("Collision");
-                    }
-                    taken[hashValue] = true;
-                }
-            #endif
-            // End: Validity check
-            return ceil(log2(seed + 1));
-        }
-};
+} // namespace shockhash

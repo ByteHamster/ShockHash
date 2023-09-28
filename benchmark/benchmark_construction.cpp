@@ -5,13 +5,15 @@
 #include "BenchmarkData.h"
 #ifdef SIMD
 #include "SIMDShockHash.hpp"
-#include "SIMDShockHash2.hpp"
 template <size_t l>
 using ShockHash = shockhash::SIMDShockHash<l, false>;
 template <size_t l>
 using ShockHashRotate = shockhash::SIMDShockHash<l, true>;
 #else
+//#define STATS
+//#define MORESTATS
 #include "ShockHash.h"
+#include "ShockHash2.h"
 template <size_t l>
 using ShockHash = shockhash::ShockHash<l, false>;
 template <size_t l>
@@ -51,10 +53,10 @@ void construct() {
 
     std::cout<<"Testing"<<std::endl;
     std::vector<bool> taken(keys.size(), false);
-    for (auto key : keys) {
-        size_t hash = hashFunc(key);
+    for (size_t i = 0; i < keys.size(); i++) {
+        size_t hash = hashFunc(keys.at(i));
         if (taken[hash]) {
-            std::cerr << "Collision!" << std::endl;
+            std::cerr << "Collision by key " << i << "!" << std::endl;
             exit(1);
         } else if (hash > numObjects) {
             std::cerr << "Out of range!" << std::endl;
@@ -94,12 +96,12 @@ void construct() {
 
 template <template<size_t> class RecSplit, size_t I>
 void dispatchLeafSize(size_t param) {
-    if constexpr (I <= 2) {
+    if constexpr (I <= 4) {
         std::cerr<<"The parameter "<<param<<" for the leaf size was not compiled into this binary."<<std::endl;
     } else if (I == param) {
         construct<RecSplit<I>>();
     } else {
-        dispatchLeafSize<RecSplit, I - 1>(param);
+        dispatchLeafSize<RecSplit, I - 4>(param);
     }
 }
 
@@ -119,7 +121,7 @@ int main(int argc, const char* const* argv) {
     if (rotate) {
         dispatchLeafSize<ShockHashRotate, shockhash::MAX_LEAF_SIZE>(leafSize);
     } else if (shockhash2) {
-        dispatchLeafSize<shockhash::SIMDShockHash2, shockhash::MAX_LEAF_SIZE>(leafSize);
+        dispatchLeafSize<shockhash::ShockHash2, shockhash::MAX_LEAF_SIZE>(leafSize);
     } else {
         //dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
     }
