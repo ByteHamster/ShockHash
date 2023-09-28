@@ -381,11 +381,6 @@ class SIMDShockHash2 {
         min_bij_code = min(min_bij_code, x);
         max_bij_code = max(max_bij_code, x);
         sum_bij_codes += x;
-
-        auto b = bij_memo_golomb[m];
-        auto log2b = lambda(b);
-        bij_unary_golomb += x / b + 1;
-        bij_fixed_golomb += x % b < ((1 << (log2b + 1)) - b) ? log2b : log2b + 1;
 #endif
     }
 
@@ -440,18 +435,6 @@ class SIMDShockHash2 {
 #ifdef MORESTATS
             ++split_count;
             num_split_trials += x + 1;
-            double e_trials = 1;
-            size_t aux = m;
-            SplittingStrategy<LEAF_SIZE> strat(m);
-            auto v = strat.begin();
-            for (int i = 0; i < strat.fanout(); ++i, ++v) {
-                e_trials *= pow((double)m / *v, *v);
-                for (size_t j = *v; j > 0; --j, --aux) {
-                    e_trials *= (double)j / aux;
-                }
-            }
-            expected_split_trials += (size_t)e_trials;
-            expected_split_evals += (size_t)e_trials * m;
             const auto log2golomb = golomb_param(m);
             split_unary += 1 + (x >> log2golomb);
             split_fixed += log2golomb;
@@ -459,11 +442,6 @@ class SIMDShockHash2 {
             min_split_code = min(min_split_code, x);
             max_split_code = max(max_split_code, x);
             sum_split_codes += x;
-
-            auto b = split_golomb_b<LEAF_SIZE>(m);
-            auto log2b = lambda(b);
-            split_unary_golomb += x / b + 1;
-            split_fixed_golomb += x % b < ((1ULL << (log2b + 1)) - b) ? log2b : log2b + 1;
 #endif
         }
     }
@@ -479,11 +457,6 @@ class SIMDShockHash2 {
         min_bij_code = 1ULL << 63;
         max_bij_code = sum_bij_codes = 0;
         sum_depths = 0;
-        minsize = this->keys_count;
-        maxsize = 0;
-        ub_split_bits = 0;
-        ub_bij_bits = 0;
-        ub_split_evals = 0;
 
         auto total_start_time = high_resolution_clock::now();
 #endif
@@ -543,6 +516,9 @@ class SIMDShockHash2 {
 
             printf("Total split bits        %16.3f\n", (double)split_fixed + split_unary);
             printf("Total bij bits:         %16.3f\n", (double)bij_fixed + bij_unary);
+            for (int i = 0; i <= LEAF_SIZE; i++) {
+                printf("Bijections of size %d:    %d\n", i, bij_count[i]);
+            }
 
             printf("\n");
             printf("Bijections: %13.3f ms\n", time_bij * 1E-6);

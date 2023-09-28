@@ -35,7 +35,6 @@ static const int MAX_LEAF_SIZE = 60;
 static uint64_t bij_unary, bij_fixed;
 static uint64_t split_unary, split_fixed;
 static uint64_t time_bij;
-#define MAX_LEVEL_TIME 10
 static uint64_t time_split[MAX_LEVEL_TIME];
 static double split_opt;
 static double bij_opt;
