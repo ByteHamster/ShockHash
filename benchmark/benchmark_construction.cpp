@@ -121,7 +121,7 @@ int main(int argc, const char* const* argv) {
     if (rotate) {
         dispatchLeafSize<ShockHashRotate, shockhash::MAX_LEAF_SIZE>(leafSize);
     } else if (shockhash2) {
-        dispatchLeafSize<shockhash::ShockHash2, shockhash::MAX_LEAF_SIZE>(leafSize);
+        dispatchLeafSize<shockhash::ShockHash2, shockhash::MAX_LEAF_SIZE2>(leafSize);
     } else {
         //dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
     }
