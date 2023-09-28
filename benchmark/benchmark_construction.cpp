@@ -10,8 +10,8 @@ using ShockHash = shockhash::SIMDShockHash<l, false>;
 template <size_t l>
 using ShockHashRotate = shockhash::SIMDShockHash<l, true>;
 #else
-//#define STATS
-//#define MORESTATS
+#define STATS
+#define MORESTATS
 #include "ShockHash.h"
 #include "ShockHash2.h"
 template <size_t l>
@@ -96,12 +96,12 @@ void construct() {
 
 template <template<size_t> class RecSplit, size_t I>
 void dispatchLeafSize(size_t param) {
-    if constexpr (I <= 4) {
+    if constexpr (I <= 2) {
         std::cerr<<"The parameter "<<param<<" for the leaf size was not compiled into this binary."<<std::endl;
     } else if (I == param) {
         construct<RecSplit<I>>();
     } else {
-        dispatchLeafSize<RecSplit, I - 4>(param);
+        dispatchLeafSize<RecSplit, I - 2>(param);
     }
 }
 
@@ -123,7 +123,7 @@ int main(int argc, const char* const* argv) {
     } else if (shockhash2) {
         dispatchLeafSize<shockhash::ShockHash2, shockhash::MAX_LEAF_SIZE2>(leafSize);
     } else {
-        //dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
+        dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
     }
     return 0;
 }
