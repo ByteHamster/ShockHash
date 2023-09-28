@@ -10,8 +10,8 @@ using ShockHash = shockhash::SIMDShockHash<l, false>;
 template <size_t l>
 using ShockHashRotate = shockhash::SIMDShockHash<l, true>;
 #else
-#define STATS
-#define MORESTATS
+//#define STATS
+//#define MORESTATS
 #include "ShockHash.h"
 #include "ShockHash2.h"
 template <size_t l>
@@ -83,7 +83,7 @@ void construct() {
               #else
               << " method=plain"
               #endif
-                << (rotate ? "Rotate" : "")
+                << (rotate ? "Rotate" : (shockhash2 ? "2" : ""))
               << " l=" << leafSize
               << " b=" << bucketSize
               << " N=" << numObjects
