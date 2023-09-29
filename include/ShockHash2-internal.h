@@ -120,7 +120,7 @@ class RotatingSeedCandidateFinder {
         }
 
         inline SeedCache<leafSize, filter> next() {
-            constexpr uint64_t mask = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
+            constexpr uint64_t mask = (leafSize >= 127) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
             while (true) {
                 while (currentRotation < (leafSize + 1) / 2) {
                     if ((takenA | rotate(takenB, currentRotation)) == mask) {
@@ -171,7 +171,7 @@ class RotatingSeedCandidateFinder {
 template <size_t leafSize>
 class CandidateList {
     private:
-        static constexpr uint64_t ALL_SET = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
+        static constexpr uint64_t ALL_SET = (leafSize >= 127) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
         std::vector<uint64_t> candidates;
     public:
         explicit CandidateList(size_t expectedNumSeeds) {
@@ -245,7 +245,7 @@ class CandidateList {
 template <size_t leafSize>
 class CandidateTree {
     private:
-        static constexpr uint64_t ALL_SET = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
+        static constexpr uint64_t ALL_SET = (leafSize >= 127) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
         static constexpr uint64_t BUCKET_MASK = 0b11111;
         std::array<std::vector<uint64_t>, BUCKET_MASK + 1> candidateMasks;
         std::array<std::vector<uint64_t>, BUCKET_MASK + 1> candidateSeeds;
