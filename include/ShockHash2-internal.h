@@ -537,30 +537,34 @@ class BijectionsShockHash2 {
             return result;
         }
 
+        static void verify(size_t seed, const std::vector<uint64_t> &keys,
+                    std::vector<std::pair<uint64_t, uint8_t>> &retrieval) {
+            std::vector<bool> taken(leafSize, false);
+            for (uint64_t key : keys) {
+                size_t retrieved = ~0u;
+                for (auto &retr : retrieval) {
+                    if (retr.first == key) {
+                        retrieved = retr.second;
+                    }
+                }
+                if (retrieved == ~0u) {
+                    throw std::logic_error("Not in retrieval");
+                }
+                size_t hashValue = hash(seed, key, retrieved);
+                if (taken[hashValue]) {
+                    throw std::logic_error("Collision");
+                }
+                taken[hashValue] = true;
+            }
+        }
+
         inline double calculateBijection(const std::vector<uint64_t> &keys) {
             size_t seed = findSeed(keys);
             // Begin: Validity check
             #ifndef NDEBUG
                 std::vector<std::pair<uint64_t, uint8_t>> retrieval;
                 constructRetrieval(keys, seed, retrieval);
-
-                std::vector<bool> taken(leafSize, false);
-                for (uint64_t key : keys) {
-                    size_t retrieved = ~0u;
-                    for (auto &retr : retrieval) {
-                        if (retr.first == key) {
-                            retrieved = retr.second;
-                        }
-                    }
-                    if (retrieved == ~0u) {
-                        throw std::logic_error("Not in retrieval");
-                    }
-                    size_t hashValue = hash(seed, key, retrieved);
-                    if (taken[hashValue]) {
-                        throw std::logic_error("Collision");
-                    }
-                    taken[hashValue] = true;
-                }
+                verify(seed, keys, retrieval);
             #endif
             // End: Validity check
             return ceil(log2(seed + 1));

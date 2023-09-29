@@ -46,8 +46,8 @@ template <size_t LEAF_SIZE> class SplittingStrategy2 {
         static constexpr size_t _leaf = LEAF_SIZE;
         static_assert(_leaf >= 1);
         static_assert(_leaf <= MAX_LEAF_SIZE2);
-        static constexpr size_t lower_aggr = _leaf * (_leaf > 24 ? 4 : 2);
-        static constexpr size_t upper_aggr = lower_aggr * (_leaf > 24 ? 3 : 2);
+        static constexpr size_t lower_aggr = _leaf * 4;
+        static constexpr size_t upper_aggr = lower_aggr * 3;
 };
 
 // Generates the precomputed table of 32-bit values holding the Golomb-Rice code
@@ -216,7 +216,7 @@ class ShockHash2 {
             if constexpr (I <= 1) {
                 return 0;
             } else if (I == param) {
-                using SH = std::conditional_t<I >= 10,
+                using SH = std::conditional_t<(I >= 10),
                         BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
                         BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
                 return SH::hash(seed, key, retrieved);
@@ -265,12 +265,14 @@ class ShockHash2 {
             if constexpr (I <= 1) {
                 return 0;
             } else if (I == param) {
-                using SH = std::conditional_t<I >= 10,
+                using SH = std::conditional_t<(I >= 10),
                         BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
                         BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
                 size_t x = SH::findSeed(leafKeys);
                 SH::constructRetrieval(leafKeys, x, ribbonInput);
-                SH().calculateBijection(leafKeys);
+                #ifndef NDEBUG
+                    SH::verify(x, leafKeys, ribbonInput);
+                #endif
                 return x;
             } else {
                 return dispatchLeafSize<I - 1>(param, leafKeys);
