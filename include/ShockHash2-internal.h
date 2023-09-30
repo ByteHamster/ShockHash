@@ -255,11 +255,13 @@ class CandidateTree {
             for (size_t i = 0; i < candidateSeeds.size(); i++) {
                 candidateSeeds[i].reserve(toReserve);
                 candidateMasks[i].reserve(toReserve);
+                candidateMasks[i].push_back(ALL_SET); // Sentinel
             }
         }
 
         inline void add(size_t seed, uint64_t mask) {
-            candidateMasks[mask & BUCKET_MASK].emplace_back(mask);
+            candidateMasks[mask & BUCKET_MASK].back() = mask;
+            candidateMasks[mask & BUCKET_MASK].emplace_back(ALL_SET);
             candidateSeeds[mask & BUCKET_MASK].emplace_back(seed);
         }
 
@@ -270,13 +272,12 @@ class CandidateTree {
             uint64_t filterMask;
             uint64_t filterMaskRestrictedToBucketMask;
             bool isEnd;
-            size_t currentBucketSize;
 
             inline void nextRelevantBucket() {
                 while ((filterMaskRestrictedToBucketMask | currentBucket) < BUCKET_MASK) {
                     currentBucket++;
                 }
-                if ((filterMaskRestrictedToBucketMask | currentBucket) < BUCKET_MASK && currentBucket <= BUCKET_MASK) {
+                if ((filterMaskRestrictedToBucketMask | currentBucket) != BUCKET_MASK && currentBucket <= BUCKET_MASK) {
                     currentBucket++;
                 }
             }
@@ -286,7 +287,6 @@ class CandidateTree {
                       filterMaskRestrictedToBucketMask(filterMask & BUCKET_MASK), isEnd(isEnd) {
                 if (!isEnd) {
                     nextRelevantBucket();
-                    currentBucketSize = candidateTree.candidateMasks[currentBucket].size();
                     operator++(); // Initialized with -1, go to first actual item
                 }
             }
@@ -303,15 +303,18 @@ class CandidateTree {
             inline IteratorType& operator++() {
                 ++currentIdx;
                 while (currentBucket <= BUCKET_MASK) {
-                    while (currentIdx < currentBucketSize) {
+                    while (true) {
                         if ((candidateTree.candidateMasks[currentBucket][currentIdx] | filterMask) == ALL_SET) {
-                            return *this;
+                            break;
                         }
                         ++currentIdx;
                     }
+                    if (currentIdx < candidateTree.candidateMasks[currentBucket].size() - 1) {
+                        // Last is sentinel, do not return that one
+                        return *this;
+                    }
                     currentBucket++;
                     nextRelevantBucket();
-                    currentBucketSize = candidateTree.candidateMasks[currentBucket].size();
                     currentIdx = 0;
                 }
                 isEnd = true;
