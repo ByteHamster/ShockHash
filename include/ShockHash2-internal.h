@@ -12,8 +12,36 @@
 #include "PairingFunction.h"
 #include "CuckooUnionFind.h"
 
+struct uint256_t {
+    __uint128_t upper;
+    __uint128_t lower;
+
+    uint256_t() : upper(0), lower(0) {
+    }
+
+    explicit uint256_t(__uint128_t lower) : upper(0), lower(lower) {
+    }
+
+    uint256_t(__uint128_t upper, __uint128_t lower) : upper(upper), lower(lower) {
+    }
+
+    uint256_t& operator |=(const uint256_t& b) {
+        upper |= b.upper;
+        lower |= b.lower;
+        return *this;
+    }
+
+    uint256_t operator&(const uint256_t &b) const {
+        return { upper & b.upper, lower & b.lower };
+    }
+
+    bool operator!=(const uint256_t &b) const {
+        return lower != b.lower || upper != b.upper;
+    }
+};
+
 template<size_t leafSize>
-using mask_full_t = __uint128_t;
+using mask_full_t = std::conditional_t<(leafSize > 128), uint256_t, __uint128_t>;
 
 template<size_t leafSize>
 using mask_half_t = std::conditional_t<(leafSize > 128), __uint128_t, uint64_t>;
@@ -21,6 +49,16 @@ using mask_half_t = std::conditional_t<(leafSize > 128), __uint128_t, uint64_t>;
 template<size_t leafSize>
 static constexpr mask_half_t<leafSize> MASK_HALF = ((leafSize + 1) / 2 >= (sizeof(mask_half_t<leafSize>) * 8))
         ? ~mask_half_t<leafSize>(0) : (mask_half_t<leafSize>(1) << ((leafSize + 1) / 2)) - 1;
+
+template<typename mask_t>
+static inline mask_t powerOfTwo(size_t exponent) {
+    return mask_t(1) << exponent;
+}
+
+template<>
+inline uint256_t powerOfTwo(size_t exponent) {
+    return { __uint128_t(exponent >= 128 ? 1 : 0) << (exponent - 128), __uint128_t(1) << exponent };
+}
 
 template <size_t leafSize, bool filter = false>
 struct SeedCache {
@@ -39,7 +77,7 @@ inline void calculateIsolatedVertices(SeedCache<leafSize, true> &seedCache) {
     }
     for (size_t i = 0; i < leafSize; i++) {
         if (hitCount[seedCache.hashes[i]] == 1) {
-            seedCache.isolatedVertices |= mask_full_t<leafSize>(1) << i;
+            seedCache.isolatedVertices |= powerOfTwo<mask_full_t<leafSize>>(i);
         }
     }
 
