@@ -12,24 +12,34 @@
 #include "PairingFunction.h"
 #include "CuckooUnionFind.h"
 
+template<size_t leafSize>
+using mask_full_t = __uint128_t;
+
+template<size_t leafSize>
+using mask_half_t = std::conditional_t<(leafSize > 128), __uint128_t, uint64_t>;
+
+template<size_t leafSize>
+static constexpr mask_half_t<leafSize> MASK_HALF = ((leafSize + 1) / 2 >= (sizeof(mask_half_t<leafSize>) * 8))
+        ? ~mask_half_t<leafSize>(0) : (mask_half_t<leafSize>(1) << ((leafSize + 1) / 2)) - 1;
+
 template <size_t leafSize, bool filter = false>
 struct SeedCache {
     [[no_unique_address]]
-    std::conditional_t<filter, __uint128_t, std::monostate> isolatedVertices;
+    std::conditional_t<filter, mask_full_t<leafSize>, std::monostate> isolatedVertices;
     uint64_t seed;
     uint8_t hashes[leafSize];
 };
 
 template <size_t leafSize>
 inline void calculateIsolatedVertices(SeedCache<leafSize, true> &seedCache) {
-    seedCache.isolatedVertices = 0;
+    seedCache.isolatedVertices = mask_full_t<leafSize>(0);
     uint64_t hitCount[leafSize] = {0};
     for (size_t i = 0; i < leafSize; i++) {
         hitCount[seedCache.hashes[i]]++;
     }
     for (size_t i = 0; i < leafSize; i++) {
         if (hitCount[seedCache.hashes[i]] == 1) {
-            seedCache.isolatedVertices |= __uint128_t(1) << i;
+            seedCache.isolatedVertices |= mask_full_t<leafSize>(1) << i;
         }
     }
 
@@ -65,16 +75,15 @@ class BasicSeedCandidateFinder {
         }
 
         inline SeedCache<leafSize, filter> next() {
-            constexpr uint64_t mask = (leafSize == 128) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
             SeedCache<leafSize, filter> seedCache; // NOLINT(cppcoreguidelines-pro-type-member-init)
             while (true) {
-                uint64_t taken = 0;
+                mask_half_t<leafSize> taken = 0;
                 for (size_t i = 0; i < leafSize; i++) {
                     uint64_t hash = util::remix(keys.at(i) + currentSeed);
                     seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    taken |= 1ul << seedCache.hashes[i];
+                    taken |= mask_half_t<leafSize>(1) << seedCache.hashes[i];
                 }
-                if (taken == mask) {
+                if (taken == MASK_HALF<leafSize>) {
                     // Found a new seed candidate
                     seedCache.seed = currentSeed;
                     if constexpr (filter) {
@@ -99,8 +108,8 @@ class RotatingSeedCandidateFinder {
         uint64_t sizeSetA = 0;
         size_t currentSeed = -1;
         size_t currentRotation = (leafSize + 1) / 2;
-        uint64_t takenA = 0;
-        uint64_t takenB = 0;
+        mask_half_t<leafSize> takenA = 0;
+        mask_half_t<leafSize> takenB = 0;
         SeedCache<leafSize, filter> seedCache; // NOLINT(cppcoreguidelines-pro-type-member-init)
     public:
         explicit RotatingSeedCandidateFinder(const std::vector<uint64_t> &keysIn) {
@@ -114,16 +123,15 @@ class RotatingSeedCandidateFinder {
             }
         }
 
-        static constexpr uint64_t rotate(uint64_t val, uint32_t x) {
+        static constexpr mask_half_t<leafSize> rotate(mask_half_t<leafSize> val, uint32_t x) {
             constexpr uint64_t l = (leafSize + 1) / 2;
             return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
         }
 
         inline SeedCache<leafSize, filter> next() {
-            constexpr uint64_t mask = (leafSize >= 127) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
             while (true) {
                 while (currentRotation < (leafSize + 1) / 2) {
-                    if ((takenA | rotate(takenB, currentRotation)) == mask) {
+                    if ((takenA | rotate(takenB, currentRotation)) == MASK_HALF<leafSize>) {
                         // Found a new seed candidate
                         SeedCache<leafSize, filter> rotated = seedCache;
                         rotated.seed = currentSeed * ((leafSize + 1) / 2) + currentRotation;
@@ -146,12 +154,12 @@ class RotatingSeedCandidateFinder {
                 for (size_t i = 0; i < sizeSetA; i++) {
                     uint64_t hash = util::remix(keys[i] + currentSeed);
                     seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    takenA |= 1ul << seedCache.hashes[i];
+                    takenA |= mask_half_t<leafSize>(1) << seedCache.hashes[i];
                 }
                 for (size_t i = sizeSetA; i < leafSize; i++) {
                     uint64_t hash = util::remix(keys[i] + currentSeed);
                     seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    takenB |= 1ul << seedCache.hashes[i];
+                    takenB |= mask_half_t<leafSize>(1) << seedCache.hashes[i];
                 }
             }
         }
@@ -171,14 +179,13 @@ class RotatingSeedCandidateFinder {
 template <size_t leafSize>
 class CandidateList {
     private:
-        static constexpr uint64_t ALL_SET = (leafSize >= 127) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
-        std::vector<uint64_t> candidates;
+        std::vector<mask_half_t<leafSize>> candidates;
     public:
         explicit CandidateList(size_t expectedNumSeeds) {
             candidates.reserve(expectedNumSeeds);
         }
 
-        inline void add(size_t seed, uint64_t mask) {
+        inline void add(size_t seed, mask_half_t<leafSize> mask) {
             assert(seed == candidates.size());
             candidates.emplace_back(mask);
         }
@@ -187,10 +194,10 @@ class CandidateList {
             const CandidateList &candidateList;
             size_t currentIdx = -1;
             size_t size = 0;
-            uint64_t filterMask;
+            mask_half_t<leafSize> filterMask;
             bool isEnd;
 
-            IteratorType(const CandidateList &candidateList, uint64_t filterMask, bool isEnd)
+            IteratorType(const CandidateList &candidateList, mask_half_t<leafSize> filterMask, bool isEnd)
                 : candidateList(candidateList), filterMask(filterMask), isEnd(isEnd) {
                 size = candidateList.candidates.size();
                 if (!isEnd) {
@@ -202,15 +209,15 @@ class CandidateList {
                 return isEnd != rhs.isEnd;
             }
 
-            inline std::pair<size_t, uint64_t> operator*() const {
-                uint64_t mask = candidateList.candidates.at(currentIdx);
+            inline std::pair<size_t, mask_half_t<leafSize>> operator*() const {
+                mask_half_t<leafSize> mask = candidateList.candidates.at(currentIdx);
                 return std::make_pair(currentIdx, mask);
             }
 
             inline IteratorType& operator++() {
                 ++currentIdx;
                 while (currentIdx < size) {
-                    if ((candidateList.candidates[currentIdx] | filterMask) == ALL_SET) {
+                    if ((candidateList.candidates[currentIdx] | filterMask) == MASK_HALF<leafSize>) {
                         return *this;
                     }
                     ++currentIdx;
@@ -222,9 +229,9 @@ class CandidateList {
 
         struct FilteredListType {
             const CandidateList &candidateList;
-            uint64_t mask;
+            mask_half_t<leafSize> mask;
 
-            FilteredListType(CandidateList &candidateList, uint64_t mask)
+            FilteredListType(CandidateList &candidateList, mask_half_t<leafSize> mask)
                 : candidateList(candidateList), mask(mask) {
             }
 
@@ -237,7 +244,7 @@ class CandidateList {
             }
         };
 
-        FilteredListType filter(uint64_t mask) {
+        FilteredListType filter(mask_half_t<leafSize> mask) {
             return FilteredListType(*this, mask);
         }
 };
@@ -245,9 +252,8 @@ class CandidateList {
 template <size_t leafSize>
 class CandidateTree {
     private:
-        static constexpr uint64_t ALL_SET = (leafSize >= 127) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
         static constexpr uint64_t BUCKET_MASK = 0b11111;
-        std::array<std::vector<uint64_t>, BUCKET_MASK + 1> candidateMasks;
+        std::array<std::vector<mask_half_t<leafSize>>, BUCKET_MASK + 1> candidateMasks;
         std::array<std::vector<uint64_t>, BUCKET_MASK + 1> candidateSeeds;
     public:
         explicit CandidateTree(size_t expectedNumSeeds) {
@@ -255,13 +261,13 @@ class CandidateTree {
             for (size_t i = 0; i < candidateSeeds.size(); i++) {
                 candidateSeeds[i].reserve(toReserve);
                 candidateMasks[i].reserve(toReserve);
-                candidateMasks[i].push_back(ALL_SET); // Sentinel
+                candidateMasks[i].push_back(MASK_HALF<leafSize>); // Sentinel
             }
         }
 
-        inline void add(size_t seed, uint64_t mask) {
+        inline void add(size_t seed, mask_half_t<leafSize> mask) {
             candidateMasks[mask & BUCKET_MASK].back() = mask;
-            candidateMasks[mask & BUCKET_MASK].emplace_back(ALL_SET);
+            candidateMasks[mask & BUCKET_MASK].emplace_back(MASK_HALF<leafSize>);
             candidateSeeds[mask & BUCKET_MASK].emplace_back(seed);
         }
 
@@ -269,8 +275,8 @@ class CandidateTree {
             const CandidateTree &candidateTree;
             size_t currentBucket = 0;
             size_t currentIdx = -1;
-            uint64_t filterMask;
-            uint64_t filterMaskRestrictedToBucketMask;
+            mask_half_t<leafSize> filterMask;
+            mask_half_t<leafSize> filterMaskRestrictedToBucketMask;
             bool isEnd;
 
             inline void nextRelevantBucket() {
@@ -282,7 +288,7 @@ class CandidateTree {
                 }
             }
 
-            IteratorType(const CandidateTree &candidateTree, uint64_t filterMask, bool isEnd)
+            IteratorType(const CandidateTree &candidateTree, mask_half_t<leafSize> filterMask, bool isEnd)
                     : candidateTree(candidateTree), filterMask(filterMask),
                       filterMaskRestrictedToBucketMask(filterMask & BUCKET_MASK), isEnd(isEnd) {
                 if (!isEnd) {
@@ -295,7 +301,7 @@ class CandidateTree {
                 return isEnd != rhs.isEnd;
             }
 
-            inline std::pair<size_t, uint64_t> operator*() const {
+            inline std::pair<size_t, mask_half_t<leafSize>> operator*() const {
                 return std::make_pair(candidateTree.candidateSeeds[currentBucket][currentIdx],
                                       candidateTree.candidateMasks[currentBucket][currentIdx]);
             }
@@ -304,7 +310,7 @@ class CandidateTree {
                 ++currentIdx;
                 while (currentBucket <= BUCKET_MASK) {
                     while (true) {
-                        if ((candidateTree.candidateMasks[currentBucket][currentIdx] | filterMask) == ALL_SET) {
+                        if ((candidateTree.candidateMasks[currentBucket][currentIdx] | filterMask) == MASK_HALF<leafSize>) {
                             break;
                         }
                         ++currentIdx;
@@ -324,9 +330,9 @@ class CandidateTree {
 
         struct FilteredListType {
             const CandidateTree &candidateTree;
-            uint64_t mask;
+            mask_half_t<leafSize> mask;
 
-            FilteredListType(CandidateTree &candidateTree, uint64_t mask)
+            FilteredListType(CandidateTree &candidateTree, mask_half_t<leafSize> mask)
                     : candidateTree(candidateTree), mask(mask) {
             }
 
@@ -339,7 +345,7 @@ class CandidateTree {
             }
         };
 
-        FilteredListType filter(uint64_t mask) {
+        FilteredListType filter(mask_half_t<leafSize> mask) {
             return FilteredListType(*this, mask);
         }
 };
@@ -396,15 +402,15 @@ class QuadSplitCandidateFinder {
         void prepareNextSeed() {
             currentSeed++;
 
-            uint64_t takenA = 0;
-            uint64_t takenB = 0;
+            mask_half_t<leafSize> takenA = 0;
+            mask_half_t<leafSize> takenB = 0;
             for (size_t i = 0; i < sizeSetA; i++) {
                 uint64_t hash = util::remix(keys[i] + currentSeed);
-                takenA |= 1ul << util::fastrange64(hash, (leafSize + 1) / 2);
+                takenA |= mask_half_t<leafSize>(1) << util::fastrange64(hash, (leafSize + 1) / 2);
             }
             for (size_t i = sizeSetA; i < leafSize; i++) {
                 uint64_t hash = util::remix(keys[i] + currentSeed);
-                takenB |= 1ul << util::fastrange64(hash, (leafSize + 1) / 2);
+                takenB |= mask_half_t<leafSize>(1) << util::fastrange64(hash, (leafSize + 1) / 2);
             }
 
             for (const auto [candidateSeed, candidateMask] : candidatesA.filter(takenB)) {
@@ -469,7 +475,7 @@ class BijectionsShockHash2 {
                 }
                 for (const SeedCache<leafSize, filter> &other : seedsCandidates) {
                     if constexpr (filter) {
-                        if ((other.isolatedVertices & newCandidate.isolatedVertices) != 0) {
+                        if ((other.isolatedVertices & newCandidate.isolatedVertices) != mask_full_t<leafSize>(0)) {
                             continue;
                         }
                     }
