@@ -21,7 +21,7 @@
 #include <SimpleRibbon.h>
 #include <Sorter.hpp>
 #include "ShockHash.h"
-#include "ShockHash2-internal.h"
+#include "ShockHash2-precompiled.h"
 #include "RiceBitVector.h"
 
 namespace shockhash {
@@ -229,22 +229,8 @@ class ShockHash2 {
             const auto b = reader.readNext(golomb_param(m));
 
             // Begin: difference to RecSplit.
-            return cum_keys + dispatchLeafSizeQ<LEAF_SIZE>(m, b, hash.second, ribbon->retrieve(hash.second));
+            return cum_keys + shockhash2query(m, b, hash.second, ribbon->retrieve(hash.second));
             // End: difference to RecSplit.
-        }
-
-        template <size_t I>
-        inline size_t dispatchLeafSizeQ(size_t param, size_t seed, uint64_t key, size_t retrieved) {
-            if constexpr (I <= 1) {
-                return 0;
-            } else if (I == param) {
-                using SH = std::conditional_t<(I >= 10),
-                        BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
-                        BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
-                return SH::hash(seed, key, retrieved);
-            } else {
-                return dispatchLeafSizeQ<I - 1>(param, seed, key, retrieved);
-            }
         }
 
         /** Returns the value associated with the given key.
@@ -274,28 +260,6 @@ class ShockHash2 {
         // Maps a 128-bit to a bucket using the first 64-bit half.
         inline uint64_t hash128_to_bucket(const hash128_t &hash) const { return remap128(hash.first, nbuckets); }
 
-        template <size_t I>
-        inline size_t dispatchLeafSize(size_t param, std::vector<uint64_t> &leafKeys) {
-            if constexpr (I <= 1) {
-                return 0;
-            } else if (I == param) {
-                using SH = std::conditional_t<(I >= 10),
-                        BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
-                        BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
-                size_t x = SH::findSeed(leafKeys);
-                {
-                    std::lock_guard<std::mutex> guard(ribbonInputMtx);
-                    SH::constructRetrieval(leafKeys, x, ribbonInput);
-                }
-                #ifndef NDEBUG
-                    SH::verify(x, leafKeys, ribbonInput);
-                #endif
-                return x;
-            } else {
-                return dispatchLeafSize<I - 1>(param, leafKeys);
-            }
-        }
-
         void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end,
                       typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level,
                       TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
@@ -309,7 +273,12 @@ class ShockHash2 {
 #endif
                 // Begin: difference to RecSplit.
                 std::vector<uint64_t> leafKeys(bucket.begin() + start, bucket.begin() + end);
-                x = dispatchLeafSize<LEAF_SIZE>(m, leafKeys);
+                std::vector<std::pair<uint64_t, uint8_t>> ribbonTmp;
+                x = shockhash2construct(m, leafKeys, ribbonTmp);
+                {
+                    std::lock_guard<std::mutex> guard(ribbonInputMtx);
+                    ribbonInput.insert(ribbonInput.end(), ribbonTmp.begin(), ribbonTmp.end());
+                }
                 // End: difference to RecSplit.
 
                 const auto log2golomb = golomb_param(m);
