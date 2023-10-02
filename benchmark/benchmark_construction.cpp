@@ -3,6 +3,7 @@
 #include <XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
 #include "BenchmarkData.h"
+#include "ShockHash2.h"
 #ifdef SIMD
 #include "SIMDShockHash.hpp"
 template <size_t l>
@@ -13,7 +14,6 @@ using ShockHashRotate = shockhash::SIMDShockHash<l, true>;
 //#define STATS
 //#define MORESTATS
 #include "ShockHash.h"
-#include "ShockHash2.h"
 template <size_t l>
 using ShockHash = shockhash::ShockHash<l, false>;
 template <size_t l>
