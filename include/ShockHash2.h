@@ -38,7 +38,7 @@ static constexpr uint8_t bij_memo2[MAX_LEAF_SIZE2 + 1] = {
         24, 24, 25, 25, 25, 26, 26, 26, 27, 27, // 60..69
         28, 28, 28, 29, 30, 30, 30, 31, 32, 31, // 70..79
         32, 32, 33, 33, 33, 34, 35, 35, 36, 36, // 80..89
-        36, 36, 37, 37, 38, 38, 39, 39, 40, 40, // 90..99
+        37, 36, 37, 37, 38, 38, 39, 39, 40, 40, // 90..99
         41, 41, 43, 43, 44, 44, 44, 44, 45, 45, // 100..109
         46, 46, 46, 47, 47, 47, 48, 48, 49, 49, // 110..119
         50, 50, 50, 51, 51, 52, 52, 53, 53, 54, // 120..129
@@ -513,6 +513,7 @@ class ShockHash2 {
             printf("Rice-Golomb descriptors: %f bits/key\n", rice_desc);
             printf("Retrieval:               %f bits/key\n", retrieval);
             printf("Total bits:              %f bits/key\n", ef_sizes + ef_bits + rice_desc + retrieval);
+            printf("sizeof(this):            %f bits/key\n", (8.0 * sizeof(*this)) / keys_count);
 
             printf("Split bits:       %16.3f\n", ((double)split_fixed + split_unary) / keys_count);
             printf("Split bits opt:   %16.3f\n", split_opt / keys_count);
