@@ -28,6 +28,7 @@ size_t numObjects = 1e6;
 size_t numQueries = 1e6;
 size_t leafSize = 20;
 size_t bucketSize = 2000;
+size_t threads = 1;
 
 template<typename HashFunc>
 void construct() {
@@ -47,7 +48,7 @@ void construct() {
 
     std::cout<<"Constructing"<<std::endl;
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    HashFunc hashFunc(keys, bucketSize);
+    HashFunc hashFunc(keys, bucketSize, threads);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 
@@ -87,6 +88,7 @@ void construct() {
               << " l=" << leafSize
               << " b=" << bucketSize
               << " N=" << numObjects
+              << " threads=" << threads
               << " numQueries=" << numQueries
               << " queryTimeMilliseconds=" << queryDurationMs
               << " constructionTimeMilliseconds=" << constructionDurationMs
@@ -113,6 +115,7 @@ int main(int argc, const char* const* argv) {
     cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
     cmd.add_bool('r', "rotate", rotate, "Apply rotation fitting");
     cmd.add_bool('2', "shockhash2", shockhash2, "ShockHash2");
+    cmd.add_bytes('t', "threads", threads, "Number of threads");
 
     if (!cmd.process(argc, argv)) {
         return 1;

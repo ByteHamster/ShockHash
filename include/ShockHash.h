@@ -12,6 +12,8 @@
 #include <string>
 #include <vector>
 #include <fstream>
+#include <condition_variable>
+#include <thread>
 #include <sux/util/Vector.hpp>
 #include <sux/function/DoubleEF.hpp>
 #include <sux/function/RiceBitVector.hpp>
@@ -19,6 +21,7 @@
 #include <SimpleRibbon.h>
 #include <Sorter.hpp>
 #include "TinyBinaryCuckooHashTable.h"
+#include "RiceBitVector.h"
 
 namespace shockhash {
 using namespace sux;
@@ -149,26 +152,44 @@ class ShockHash {
         using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
         Ribbon *ribbon = nullptr;
         std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
+        std::mutex ribbonInputMtx;
 
     public:
         ShockHash() {}
 
 
-        ShockHash(const vector<string> &keys, const size_t bucket_size) {
+        ShockHash(const vector<string> &keys, const size_t bucket_size, size_t num_threads = 1) {
             this->bucket_size = bucket_size;
             this->keys_count = keys.size();
             hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
-            for (size_t i = 0; i < this->keys_count; ++i) {
-                h[i] = first_hash(keys[i].c_str(), keys[i].size());
+            if (num_threads == 1) {
+                for (size_t i = 0; i < this->keys_count; ++i) {
+                    h[i] = first_hash(keys[i].c_str(), keys[i].size());
+                }
+            } else {
+                size_t keysPerThread = this->keys_count / num_threads + 1;
+                std::vector<std::thread> threads;
+                for (size_t thread = 0; thread < num_threads; thread++) {
+                    threads.emplace_back([&, thread] {
+                        size_t from = thread * keysPerThread;
+                        size_t to = std::min(this->keys_count, (thread + 1) * keysPerThread);
+                        for (size_t i = from; i < to; ++i) {
+                            h[i] = first_hash(keys[i].c_str(), keys[i].size());
+                        }
+                    });
+                }
+                for (std::thread &t : threads) {
+                    t.join();
+                }
             }
-            hash_gen(h);
+            hash_gen(h, num_threads);
             free(h);
         }
 
-        ShockHash(vector<hash128_t> &keys, const size_t bucket_size) {
+        ShockHash(vector<hash128_t> &keys, const size_t bucket_size, size_t num_threads = 1) {
             this->bucket_size = bucket_size;
             this->keys_count = keys.size();
-            hash_gen(&keys[0]);
+            hash_gen(&keys[0], num_threads);
         }
 
         /** Returns the value associated with the given 128-bit hash.
@@ -277,14 +298,6 @@ class ShockHash {
         // Maps a 128-bit to a bucket using the first 64-bit half.
         inline uint64_t hash128_to_bucket(const hash128_t &hash) const { return remap128(hash.first, nbuckets); }
 
-        // Computes and stores the splittings and bijections of a bucket.
-        void recSplit(vector<uint64_t> &bucket, typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary,
-                      TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
-            const auto m = bucket.size();
-            vector<uint64_t> temp(m);
-            recSplit(bucket, temp, 0, bucket.size(), builder, unary, 0, tinyBinaryCuckooHashTable);
-        }
-
         static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
             return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
         }
@@ -364,28 +377,31 @@ class ShockHash {
                         }
                     }
                     storeOrientation:
-                    for (size_t i = 0; i < m; i++) {
-                        auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
-                        size_t cell = i;
-                        if ((hash.mhc & 1) == 1) {
-                            // Set B
-                            cell = (cell - r + m) % m;
-                        }
-                        // Use fact that first hash function is < m/2 (see getCandidateCells)
-                        ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
-                        #ifndef NDEBUG
+                    {
+                        std::lock_guard<std::mutex> guard(ribbonInputMtx);
+                        for (size_t i = 0; i < m; i++) {
+                            auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
+                            size_t cell = i;
+                            if ((hash.mhc & 1) == 1) {
+                                // Set B
+                                cell = (cell - r + m) % m;
+                            }
+                            // Use fact that first hash function is < m/2 (see getCandidateCells)
+                            ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
+                            #ifndef NDEBUG
                             TinyBinaryCuckooHashTable::CandidateCells candidateCells;
-                            if ((hash.mhc & 1) == 0) {
+                                if ((hash.mhc & 1) == 0) {
                                 // Set A
                                 candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x & (~GROUP_A_HF_MASK), m);
-                            } else {
+                                } else {
                                 // Set B
                                 candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(hash, x, m);
                                 candidateCells.cell1 = (candidateCells.cell1 + r) % m;
                                 candidateCells.cell2 = (candidateCells.cell2 + r) % m;
-                            }
-                            assert(i == candidateCells.cell1 || i == candidateCells.cell2);
-                        #endif
+                                }
+                                assert(i == candidateCells.cell1 || i == candidateCells.cell2);
+                            #endif
+                        }
                     }
                     x -= start_seed[level];
                     x = x * LEAF_SIZE + r;
@@ -410,13 +426,16 @@ class ShockHash {
                         if (tinyBinaryCuckooHashTable.construct(x)) break;
                         x++;
                     }
-                    for (size_t i = 0; i < m; i++) {
-                        // Use fact that first hash function is < m/2 (see getCandidateCells)
-                        ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, (i < m / 2) ? 0 : 1);
-                        #ifndef NDEBUG
+                    {
+                        std::lock_guard<std::mutex> guard(ribbonInputMtx);
+                        for (size_t i = 0; i < m; i++) {
+                            // Use fact that first hash function is < m/2 (see getCandidateCells)
+                            ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, (i < m / 2) ? 0 : 1);
+                            #ifndef NDEBUG
                             auto candidateCells = TinyBinaryCuckooHashTable::getCandidateCells(tinyBinaryCuckooHashTable.cells[i]->hash, x, m);
                             assert(i == candidateCells.cell1 || i == candidateCells.cell2);
-                        #endif
+                            #endif
+                        }
                     }
                     x -= start_seed[level];
                 }
@@ -542,7 +561,51 @@ class ShockHash {
             }
         }
 
-        void hash_gen(hash128_t *hashes) {
+        void compute_thread(int tid, int num_threads, mutex &mtx, std::condition_variable &condition,
+                            vector<uint64_t> &bucket_size_acc, vector<uint64_t> &bucket_pos_acc,
+                            vector<uint64_t> &sorted_keys, int &next_thread_to_append_builder,
+                            typename shockhash::RiceBitVector<AT>::Builder &builder) {
+            typename shockhash::RiceBitVector<AT>::Builder local_builder;
+            TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
+            vector<uint32_t> unary;
+            vector<uint64_t> temp(MAX_BUCKET_SIZE);
+            size_t begin = tid * this->nbuckets / num_threads;
+            size_t end = std::min(this->nbuckets, (tid + 1) * this->nbuckets / num_threads);
+            if (tid == num_threads - 1) {
+                end = this->nbuckets;
+            }
+            for (size_t i = begin; i < end; ++i) {
+                const size_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
+                if (s > 1) {
+                    recSplit(sorted_keys, temp, bucket_size_acc[i], bucket_size_acc[i + 1], local_builder,
+                             unary, 0, tinyBinaryCuckooHashTable);
+                    local_builder.appendUnaryAll(unary);
+                    unary.clear();
+                }
+                bucket_pos_acc[i + 1] = local_builder.getBits();
+            }
+            if (tid == 0) {
+                builder = std::move(local_builder);
+                lock_guard<mutex> lock(mtx);
+                next_thread_to_append_builder = 1;
+                condition.notify_all();
+            } else {
+                uint64_t prev_bucket_pos;
+                {
+                    unique_lock<mutex> lock(mtx);
+                    condition.wait(lock, [&] { return next_thread_to_append_builder == tid; });
+                    prev_bucket_pos = builder.getBits();
+                    builder.appendRiceBitVector(local_builder);
+                    next_thread_to_append_builder = tid + 1;
+                    condition.notify_all();
+                }
+                for (size_t i = begin + 1; i < end + 1; ++i) {
+                    bucket_pos_acc[i] += prev_bucket_pos;
+                }
+            }
+        }
+
+        void hash_gen(hash128_t *hashes, size_t num_threads) {
 #ifdef STATS
             split_unary = split_fixed = 0;
             bij_unary = bij_fixed = 0;
@@ -557,27 +620,35 @@ class ShockHash {
 		}
 #endif
             nbuckets = max(1, (keys_count + bucket_size - 1) / bucket_size);
-            auto bucket_size_acc = vector<int64_t>(nbuckets + 1);
-            auto bucket_pos_acc = vector<int64_t>(nbuckets + 1);
-            TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
+            auto bucket_size_acc = vector<uint64_t>(nbuckets + 1);
+            auto bucket_pos_acc = vector<uint64_t>(nbuckets + 1);
+            auto sorted_keys = vector<uint64_t>(keys_count);
             ribbonInput.reserve(keys_count);
 
-            sort_hash128_t(hashes, keys_count);
+            parallelPartition(hashes, sorted_keys, bucket_size_acc, num_threads, keys_count, nbuckets);
             typename RiceBitVector<AT>::Builder builder;
 
-            bucket_size_acc[0] = bucket_pos_acc[0] = 0;
-            for (size_t i = 0, last = 0; i < nbuckets; i++) {
-                vector<uint64_t> bucket;
-                for (; last < keys_count && hash128_to_bucket(hashes[last]) == i; last++) bucket.push_back(hashes[last].second);
-
-                const size_t s = bucket.size();
-                bucket_size_acc[i + 1] = bucket_size_acc[i] + s;
-                if (bucket.size() > 1) {
-                    vector<uint32_t> unary;
-                    recSplit(bucket, builder, unary, tinyBinaryCuckooHashTable);
-                    builder.appendUnaryAll(unary);
+            vector<std::thread> threads;
+            threads.reserve(num_threads);
+            mutex mtx;
+            std::condition_variable condition;
+            int next_thread_to_append_builder = 0;
+            bucket_pos_acc[0] = 0;
+            if (num_threads == 1) {
+                compute_thread(0, num_threads, mtx, condition,
+                               bucket_size_acc, bucket_pos_acc, sorted_keys,
+                               next_thread_to_append_builder, builder);
+            } else {
+                for (int tid = 0; tid < num_threads; ++tid) {
+                    threads.emplace_back([&, tid] {
+                        compute_thread(tid, num_threads, mtx, condition,
+                                       bucket_size_acc, bucket_pos_acc, sorted_keys,
+                                       next_thread_to_append_builder, builder);
+                    });
                 }
-                bucket_pos_acc[i + 1] = builder.getBits();
+                for (auto &thread: threads) {
+                    thread.join();
+                }
             }
             builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
             descriptors = builder.build();
