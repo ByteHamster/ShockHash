@@ -126,22 +126,18 @@ class ShockHash2 {
         // skip in the fixed part of the tree (lower 24 bits).
         static constexpr array<uint64_t, MAX_BUCKET_SIZE> memo = fill_golomb_rice2<LEAF_SIZE>();
 
-        size_t bucket_size;
         size_t nbuckets;
         size_t keys_count;
         RiceBitVector<AT> descriptors;
         DoubleEF<AT> ef;
         using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
         Ribbon *ribbon = nullptr;
-        std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
-        std::mutex ribbonInputMtx;
 
     public:
         ShockHash2() {}
 
 
         ShockHash2(const vector<string> &keys, const size_t bucket_size, size_t num_threads = 1) {
-            this->bucket_size = bucket_size;
             this->keys_count = keys.size();
             hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
             if (num_threads == 1) {
@@ -164,14 +160,13 @@ class ShockHash2 {
                     t.join();
                 }
             }
-            hash_gen(h, num_threads);
+            hash_gen(h, num_threads, bucket_size);
             free(h);
         }
 
         ShockHash2(vector<hash128_t> &keys, const size_t bucket_size, size_t num_threads = 1) {
-            this->bucket_size = bucket_size;
             this->keys_count = keys.size();
-            hash_gen(&keys[0], num_threads);
+            hash_gen(&keys[0], num_threads, bucket_size);
         }
 
         /** Returns the value associated with the given 128-bit hash.
@@ -263,7 +258,8 @@ class ShockHash2 {
 
         void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t end,
                       typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level,
-                      TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
+                      TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable,
+                      std::vector<std::pair<uint64_t, uint8_t>> &ribbonInput) {
             const auto m = end - start;
             assert(m > 1);
             uint64_t x = start_seed[level];
@@ -274,12 +270,7 @@ class ShockHash2 {
 #endif
                 // Begin: difference to RecSplit.
                 std::vector<uint64_t> leafKeys(bucket.begin() + start, bucket.begin() + end);
-                std::vector<std::pair<uint64_t, uint8_t>> ribbonTmp;
-                x = shockhash2construct(m, leafKeys, ribbonTmp);
-                {
-                    std::lock_guard<std::mutex> guard(ribbonInputMtx);
-                    ribbonInput.insert(ribbonInput.end(), ribbonTmp.begin(), ribbonTmp.end());
-                }
+                x = shockhash2construct(m, leafKeys, ribbonInput);
                 // End: difference to RecSplit.
 
                 const auto log2golomb = golomb_param(m);
@@ -325,8 +316,8 @@ class ShockHash2 {
                     time_split[min(MAX_LEVEL_TIME, level)] += duration_cast<nanoseconds>(high_resolution_clock::now() - start_time).count();
                     split_opt += log2(x + 1);
 #endif
-                    recSplit(bucket, temp, start, start + split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
-                    if (m - split > 1) recSplit(bucket, temp, start + split, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    recSplit(bucket, temp, start, start + split, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
+                    if (m - split > 1) recSplit(bucket, temp, start + split, end, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                 } else if (m > lower_aggr) { // 2nd aggregation level
                     const size_t fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
                     size_t count[fanout]; // Note that we never read count[fanout-1]
@@ -358,9 +349,9 @@ class ShockHash2 {
 #endif
                     size_t i;
                     for (i = 0; i < m - lower_aggr; i += lower_aggr) {
-                        recSplit(bucket, temp, start + i, start + i + lower_aggr, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                        recSplit(bucket, temp, start + i, start + i + lower_aggr, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                     }
-                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                 } else { // First aggregation level, m <= lower_aggr
                     const size_t fanout = uint16_t(m + _leaf - 1) / _leaf;
                     size_t count[fanout]; // Note that we never read count[fanout-1]
@@ -391,9 +382,9 @@ class ShockHash2 {
 #endif
                     size_t i;
                     for (i = 0; i < m - _leaf; i += _leaf) {
-                        recSplit(bucket, temp, start + i, start + i + _leaf, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                        recSplit(bucket, temp, start + i, start + i + _leaf, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                     }
-                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                 }
 #ifdef STATS
                 const auto log2golomb = golomb_param(m);
@@ -406,7 +397,8 @@ class ShockHash2 {
         void compute_thread(int tid, int num_threads, mutex &mtx, std::condition_variable &condition,
                             vector<uint64_t> &bucket_size_acc, vector<uint64_t> &bucket_pos_acc,
                             vector<uint64_t> &sorted_keys, int &next_thread_to_append_builder,
-                            typename shockhash::RiceBitVector<AT>::Builder &builder) {
+                            typename shockhash::RiceBitVector<AT>::Builder &builder,
+                            std::vector<std::pair<uint64_t, uint8_t>> &ribbonInput) {
             typename RiceBitVector<AT>::Builder local_builder;
             TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
             vector<uint32_t> unary;
@@ -420,7 +412,7 @@ class ShockHash2 {
                 const size_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
                 if (s > 1) {
                     recSplit(sorted_keys, temp, bucket_size_acc[i], bucket_size_acc[i + 1], local_builder,
-                             unary, 0, tinyBinaryCuckooHashTable);
+                             unary, 0, tinyBinaryCuckooHashTable, ribbonInput);
                     local_builder.appendUnaryAll(unary);
                     unary.clear();
                 }
@@ -447,7 +439,7 @@ class ShockHash2 {
             }
         }
 
-        void hash_gen(hash128_t *hashes, int num_threads) {
+        void hash_gen(hash128_t *hashes, int num_threads, size_t bucket_size) {
 #ifdef STATS
             split_unary = split_fixed = 0;
             bij_unary = bij_fixed = 0;
@@ -465,8 +457,9 @@ class ShockHash2 {
             auto bucket_size_acc = std::vector<uint64_t>(nbuckets + 1);
             auto bucket_pos_acc = std::vector<uint64_t>(nbuckets + 1);
             auto sorted_keys = vector<uint64_t>(keys_count);
-            ribbonInput.reserve(keys_count);
 
+            std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
+            ribbonInput.reserve(keys_count);
             parallelPartition(hashes, sorted_keys, bucket_size_acc, num_threads, keys_count, nbuckets);
             typename RiceBitVector<AT>::Builder builder;
 
@@ -479,26 +472,30 @@ class ShockHash2 {
             if (num_threads == 1) {
                 compute_thread(0, num_threads, mtx, condition,
                                bucket_size_acc, bucket_pos_acc, sorted_keys,
-                               next_thread_to_append_builder, builder);
+                               next_thread_to_append_builder, builder, ribbonInput);
             } else {
+                std::vector<std::vector<std::pair<uint64_t, uint8_t>>> ribbonInputs;
+                ribbonInputs.resize(num_threads);
                 for (int tid = 0; tid < num_threads; ++tid) {
+                    ribbonInputs.at(tid).reserve(keys_count / num_threads);
                     threads.emplace_back([&, tid] {
                         compute_thread(tid, num_threads, mtx, condition,
                                        bucket_size_acc, bucket_pos_acc, sorted_keys,
-                                       next_thread_to_append_builder, builder);
+                                       next_thread_to_append_builder, builder, ribbonInputs.at(tid));
                     });
                 }
-                for (auto &thread: threads) {
-                    thread.join();
+                for (int tid = 0; tid < num_threads; ++tid) {
+                    threads.at(tid).join();
+                    ribbonInput.insert(ribbonInput.end(), ribbonInputs.at(tid).begin(), ribbonInputs.at(tid).end());
                 }
             }
             builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
             descriptors = builder.build();
-            ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
+            ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()),
+                    vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
             // Begin: difference to RecSplit.
             ribbon = new Ribbon(ribbonInput);
-            ribbonInput.clear();
             // End: difference to RecSplit.
 
 #ifdef STATS
