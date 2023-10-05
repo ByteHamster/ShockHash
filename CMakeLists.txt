@@ -86,4 +86,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     add_executable(Bijections benchmark/bijections.cpp)
     target_link_libraries(Bijections PUBLIC ShockHash BenchmarkUtils)
+
+    add_executable(GolombMemoTuner benchmark/golombMemoTuner.cpp)
+    target_link_libraries(GolombMemoTuner PUBLIC ShockHash BenchmarkUtils)
 endif()
