@@ -33,45 +33,45 @@ void testSingle(size_t iterations) {
 template<uint8_t leafSize>
 void test(size_t iterations, size_t iterationsSlow) {
     (void) iterationsSlow;
-    /*std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplit "<<std::flush;
-    testSingle<leafSize, BijectionsRecSplit<leafSize>>(iterationsSlow);
-    std::cout<<std::endl;
+    //std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplit "<<std::flush;
+    //testSingle<leafSize, BijectionsRecSplit<leafSize>>(iterationsSlow);
+    //std::cout<<std::endl;
 
     if constexpr (leafSize <= 16) {
         std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplitRotate "<<std::flush;
         testSingle<leafSize, BijectionsRotate<leafSize, false>>(iterations);
         std::cout << std::endl;
 
-        std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplitRotateLookup "<<std::flush;
-        testSingle<leafSize, BijectionsRotate<leafSize, true>>(iterations);
-        std::cout << std::endl;
+        //std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplitRotateLookup "<<std::flush;
+        //testSingle<leafSize, BijectionsRotate<leafSize, true>>(iterations);
+        //std::cout << std::endl;
     }
 
-    if constexpr (leafSize <= 64) {
-        std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash "<<std::flush;
-        testSingle<leafSize, BijectionsShockHash1<leafSize>>(iterations / 10);
-        std::cout<<std::endl;
+    if constexpr (leafSize < 64) {
+        //std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash "<<std::flush;
+        //testSingle<leafSize, BijectionsShockHash1<leafSize>>(iterations / 10);
+        //std::cout<<std::endl;
 
         std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHashRotate "<<std::flush;
         testSingle<leafSize, BijectionsShockHash1Rotate<leafSize>>(iterations / 10);
         std::cout<<std::endl;
-    }*/
+    }
 
-    /*std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2"<<std::flush;
+    std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2"<<std::flush;
     testSingle<leafSize, BijectionsShockHash2<leafSize, false, BasicSeedCandidateFinder>>(iterations);
-    std::cout<<std::endl;*/
+    std::cout<<std::endl;
 
-    /*std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2Filter"<<std::flush;
+    std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2Filter"<<std::flush;
     testSingle<leafSize, BijectionsShockHash2<leafSize, true, BasicSeedCandidateFinder>>(iterations);
-    std::cout<<std::endl;*/
+    std::cout<<std::endl;
 
-    /*std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2RotateFilter"<<std::flush;
-    testSingle<leafSize, BijectionsShockHash2<leafSize, true, RotatingSeedCandidateFinder>>(iterations);
-    std::cout<<std::endl;*/
+    //std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2RotateFilter"<<std::flush;
+    //testSingle<leafSize, BijectionsShockHash2<leafSize, true, RotatingSeedCandidateFinder>>(iterations);
+    //std::cout<<std::endl;
 
-    /*std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2QuadSplitFilter"<<std::flush;
+    std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2QuadSplitFilter"<<std::flush;
     testSingle<leafSize, BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderList>>(iterations);
-    std::cout<<std::endl;*/
+    std::cout<<std::endl;
 
     std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2QuadSplitTreeFilter"<<std::flush;
     testSingle<leafSize, BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderTree>>(iterations);
@@ -81,14 +81,13 @@ void test(size_t iterations, size_t iterationsSlow) {
 }
 
 int main() {
-    /*test<4> (6000000, 100000);
     test<8> (6000000, 100000);
     test<12>(6000000, 6000);
     test<16>(4000000, 500);
     test<20>(1000000, 100);
     test<24>(500000, 1);
     test<28>(100000, 1);
-    test<32>(100000, 1);*/
+    test<32>(100000, 1);
     test<36>(50000, 1);
     test<40>(10000, 0);
     test<44>(10000, 0);
@@ -97,11 +96,19 @@ int main() {
     test<56>(5000, 0);
     test<60>(1000, 0);
     test<64>(1000, 0);
-    test<70>(1000, 0);
+    test<68>(1000, 0);
+    test<72>(1000, 0);
+    test<76>(1000, 0);
     test<80>(1000, 0);
-    test<90>(100, 0);
+    test<84>(100, 0);
+    test<88>(100, 0);
+    test<92>(100, 0);
+    test<96>(30, 0);
     test<100>(30, 0);
-    test<110>(20, 0);
-    test<120>(50, 0);
-    test<128>(50, 0);
+    test<104>(20, 0);
+    test<108>(20, 0);
+    test<112>(20, 0);
+    //test<120>(50, 0);
+    //test<128>(50, 0);
+    //test<136>(5, 0);
 }
