@@ -73,9 +73,9 @@ void test(size_t iterations, size_t iterationsSlow) {
     testSingle<leafSize, BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderList>>(iterations);
     std::cout<<std::endl;
 
-    std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2QuadSplitTreeFilter"<<std::flush;
-    testSingle<leafSize, BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderTree>>(iterations);
-    std::cout<<std::endl;
+    //std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2QuadSplitBucketsFilter"<<std::flush;
+    //testSingle<leafSize, BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderBuckets>>(iterations);
+    //std::cout<<std::endl;
 
     std::cout<<std::endl;
 }
@@ -110,5 +110,4 @@ int main() {
     test<112>(20, 0);
     //test<120>(50, 0);
     //test<128>(50, 0);
-    //test<136>(5, 0);
 }

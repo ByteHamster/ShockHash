@@ -18,7 +18,7 @@ inline size_t dispatchLeafSizeQ(size_t param, size_t seed, uint64_t key, size_t 
 }
 
 size_t shockhash2query(size_t param, size_t seed, uint64_t key, size_t retrieved) {
-   return dispatchLeafSizeQ<160>(param, seed, key, retrieved);
+   return dispatchLeafSizeQ<128>(param, seed, key, retrieved);
 }
 
 template<size_t I>
@@ -43,7 +43,7 @@ inline size_t dispatchLeafSize(size_t param, std::vector<uint64_t> &leafKeys,
 
 size_t shockhash2construct(size_t param, std::vector<uint64_t> &leafKeys,
                         std::vector<std::pair<uint64_t, uint8_t>> &ribbonInput) {
-    return dispatchLeafSize<160>(param, leafKeys, ribbonInput);
+    return dispatchLeafSize<128>(param, leafKeys, ribbonInput);
 }
 
 }
