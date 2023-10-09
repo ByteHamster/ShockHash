@@ -288,13 +288,13 @@ class CandidateList {
 };
 
 template <size_t leafSize>
-class CandidateTree {
+class CandidateBuckets {
     private:
         static constexpr uint64_t BUCKET_MASK = 0b11111;
         std::array<std::vector<mask_half_t<leafSize>>, BUCKET_MASK + 1> candidateMasks;
         std::array<std::vector<uint64_t>, BUCKET_MASK + 1> candidateSeeds;
     public:
-        explicit CandidateTree(size_t expectedNumSeeds) {
+        explicit CandidateBuckets(size_t expectedNumSeeds) {
             size_t toReserve = expectedNumSeeds / candidateSeeds.size();
             for (size_t i = 0; i < candidateSeeds.size(); i++) {
                 candidateSeeds[i].reserve(toReserve);
@@ -310,7 +310,7 @@ class CandidateTree {
         }
 
         struct IteratorType {
-            const CandidateTree &candidateTree;
+            const CandidateBuckets &candidateTree;
             size_t currentBucket = 0;
             size_t currentIdx = -1;
             mask_half_t<leafSize> filterMask;
@@ -326,7 +326,7 @@ class CandidateTree {
                 }
             }
 
-            IteratorType(const CandidateTree &candidateTree, mask_half_t<leafSize> filterMask, bool isEnd)
+            IteratorType(const CandidateBuckets &candidateTree, mask_half_t<leafSize> filterMask, bool isEnd)
                     : candidateTree(candidateTree), filterMask(filterMask),
                       filterMaskRestrictedToBucketMask(filterMask & BUCKET_MASK), isEnd(isEnd) {
                 if (!isEnd) {
@@ -347,14 +347,15 @@ class CandidateTree {
             inline IteratorType& operator++() {
                 ++currentIdx;
                 while (currentBucket <= BUCKET_MASK) {
+                    const std::vector<mask_half_t<leafSize>> &bucket = candidateTree.candidateMasks[currentBucket];
                     while (true) {
-                        if ((candidateTree.candidateMasks[currentBucket][currentIdx] | filterMask) == MASK_HALF<leafSize>) {
+                        if ((bucket[currentIdx] | filterMask) == MASK_HALF<leafSize>) {
                             break;
                         }
                         ++currentIdx;
                     }
-                    if (currentIdx < candidateTree.candidateMasks[currentBucket].size() - 1) {
-                        // Last is sentinel, do not return that one
+                    if (currentIdx < bucket.size() - 1) {
+                        // Last is sentinel, return only if not sentinel
                         return *this;
                     }
                     currentBucket++;
@@ -367,10 +368,10 @@ class CandidateTree {
         };
 
         struct FilteredListType {
-            const CandidateTree &candidateTree;
+            const CandidateBuckets &candidateTree;
             mask_half_t<leafSize> mask;
 
-            FilteredListType(CandidateTree &candidateTree, mask_half_t<leafSize> mask)
+            FilteredListType(CandidateBuckets &candidateTree, mask_half_t<leafSize> mask)
                     : candidateTree(candidateTree), mask(mask) {
             }
 
@@ -390,7 +391,7 @@ class CandidateTree {
 
 template <template<size_t> typename CandidateList, size_t leafSize, bool filter = false>
 class QuadSplitCandidateFinder {
-    private:
+    public:
         static constexpr double E_HALF = 1.359140914;
         std::array<uint64_t, leafSize> keys = { 0 };
         uint64_t sizeSetA = 0;
@@ -489,7 +490,7 @@ template <size_t leafSize, bool filter>
 using QuadSplitCandidateFinderList = QuadSplitCandidateFinder<CandidateList, leafSize, filter>;
 
 template <size_t leafSize, bool filter>
-using QuadSplitCandidateFinderTree = QuadSplitCandidateFinder<CandidateTree, leafSize, filter>;
+using QuadSplitCandidateFinderBuckets = QuadSplitCandidateFinder<CandidateBuckets, leafSize, filter>;
 
 /**
  * ShockHash2 base case.

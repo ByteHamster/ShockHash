@@ -9,7 +9,7 @@ inline size_t dispatchLeafSizeQ(size_t param, size_t seed, uint64_t key, size_t 
         return 0;
     } else if (I == param) {
         using SH = std::conditional_t<(I >= 10),
-                BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
+                BijectionsShockHash2<I, true, QuadSplitCandidateFinderList>,
                 BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
         return SH::hash(seed, key, retrieved);
     } else {
@@ -28,7 +28,7 @@ inline size_t dispatchLeafSize(size_t param, std::vector<uint64_t> &leafKeys,
         return 0;
     } else if (I == param) {
         using SH = std::conditional_t<(I >= 10),
-                BijectionsShockHash2<I, true, QuadSplitCandidateFinderTree>,
+                BijectionsShockHash2<I, true, QuadSplitCandidateFinderList>,
                 BijectionsShockHash2<I, true, BasicSeedCandidateFinder>>;
         size_t x = SH::findSeed(leafKeys);
         SH::constructRetrieval(leafKeys, x, ribbonInput);
