@@ -176,12 +176,14 @@ class CandidateList {
     public:
         explicit CandidateList(size_t expectedNumSeeds) {
             candidates.reserve(expectedNumSeeds);
+            candidates.emplace_back(MASK_HALF<leafSize>); // Sentinel
         }
 
         inline void add(size_t seed, uint64_t mask) {
             assert(seed == candidates.size());
             (void) seed;
-            candidates.emplace_back(mask);
+            candidates.back() = mask;
+            candidates.emplace_back(MASK_HALF<leafSize>); // Sentinel
         }
 
         struct IteratorType {
@@ -210,11 +212,15 @@ class CandidateList {
 
             inline IteratorType& operator++() {
                 ++currentIdx;
-                while (currentIdx < size) {
+                while (true) {
                     if ((candidateList.candidates[currentIdx] | filterMask) == MASK_HALF<leafSize>) {
-                        return *this;
+                        break;
                     }
                     ++currentIdx;
+                }
+                if (currentIdx < size - 1) {
+                    // Last is sentinel, return only if not sentinel
+                    return *this;
                 }
                 isEnd = true;
                 return *this;
