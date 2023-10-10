@@ -9,8 +9,14 @@
 #include <algorithm>
 #include <TinyBinaryCuckooHashTable.h>
 #include <UnionFind.h>
+#include <experimental/simd>
 #include "PairingFunction.h"
 #include "CuckooUnionFind.h"
+
+namespace stdx = std::experimental;
+
+template<typename T>
+using simd_t = stdx::native_simd<T>;
 
 template<size_t leafSize>
 static constexpr uint64_t MASK_HALF = ((leafSize + 1) / 2 >= 64) ? ~0ul : (1ul << ((leafSize + 1) / 2)) - 1;
@@ -172,18 +178,21 @@ class RotatingSeedCandidateFinder {
 template <size_t leafSize>
 class CandidateList {
     private:
+        static constexpr size_t NUM_SENTINELS = simd_t<uint64_t>::size() + 1;
         std::vector<uint64_t> candidates;
     public:
         explicit CandidateList(size_t expectedNumSeeds) {
             candidates.reserve(expectedNumSeeds);
-            candidates.emplace_back(MASK_HALF<leafSize>); // Sentinel
+            for (size_t i = 0; i < NUM_SENTINELS; i++) {
+                candidates.emplace_back(MASK_HALF<leafSize>);
+            }
         }
 
         inline void add(size_t seed, uint64_t mask) {
-            assert(seed == candidates.size());
+            assert(seed == candidates.size() - NUM_SENTINELS);
             (void) seed;
-            candidates.back() = mask;
-            candidates.emplace_back(MASK_HALF<leafSize>); // Sentinel
+            *(candidates.end() - NUM_SENTINELS) = mask;
+            candidates.emplace_back(MASK_HALF<leafSize>);
         }
 
         struct IteratorType {
@@ -212,13 +221,18 @@ class CandidateList {
 
             inline IteratorType& operator++() {
                 ++currentIdx;
+                simd_t<uint64_t> filterMaskSimd = filterMask;
+                simd_t<uint64_t> maskHalfSimd = MASK_HALF<leafSize>;
                 while (true) {
-                    if ((candidateList.candidates[currentIdx] | filterMask) == MASK_HALF<leafSize>) {
+                    simd_t<uint64_t> read(&candidateList.candidates[currentIdx], stdx::element_aligned);
+                    simd_t<uint64_t>::mask_type comparisonResult = (read | filterMaskSimd) == maskHalfSimd;
+                    if (stdx::any_of(comparisonResult)) {
+                        currentIdx += stdx::find_first_set(comparisonResult);
                         break;
                     }
-                    ++currentIdx;
+                    currentIdx += simd_t<uint64_t>::size();
                 }
-                if (currentIdx < size - 1) {
+                if (currentIdx < size - NUM_SENTINELS) {
                     // Last is sentinel, return only if not sentinel
                     return *this;
                 }
