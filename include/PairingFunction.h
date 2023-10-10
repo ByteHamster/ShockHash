@@ -2,6 +2,7 @@
 
 #include <cmath>
 
+namespace shockhash {
 /**
  * Cantor Pairing Function: https://en.wikipedia.org/wiki/Pairing_function
  * Assigns numbers diagonally
@@ -93,3 +94,4 @@ inline bool isFloatAccurateElegant(size_t x, size_t y) {
     auto [restoredX, restoredY] = unpairElegant(pairElegant(x, y));
     return x == restoredX && y == restoredY;
 }
+} // namespace shockhash

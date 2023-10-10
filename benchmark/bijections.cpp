@@ -33,6 +33,8 @@ void testSingle(size_t iterations) {
 template<uint8_t leafSize>
 void test(size_t iterations, size_t iterationsSlow) {
     (void) iterationsSlow;
+    using namespace shockhash;
+
     //std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplit "<<std::flush;
     //testSingle<leafSize, BijectionsRecSplit<leafSize>>(iterationsSlow);
     //std::cout<<std::endl;

@@ -13,6 +13,7 @@
 #include "PairingFunction.h"
 #include "CuckooUnionFind.h"
 
+namespace shockhash {
 namespace stdx = std::experimental;
 
 template<typename T>
@@ -594,3 +595,4 @@ class BijectionsShockHash2 {
             return ceil(log2(seed + 1));
         }
 };
+} // namespace shockhash

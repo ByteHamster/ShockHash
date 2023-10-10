@@ -55,8 +55,8 @@ void dispatchLeafSize() {
 
 template <size_t leafSize>
 using ShockHash2 = std::conditional_t<(leafSize >= 10),
-        BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderTree>,
-        BijectionsShockHash2<leafSize, true, BasicSeedCandidateFinder>>;
+        shockhash::BijectionsShockHash2<leafSize, true, shockhash::QuadSplitCandidateFinderBuckets>,
+        shockhash::BijectionsShockHash2<leafSize, true, shockhash::BasicSeedCandidateFinder>>;
 
 int main() {
     constexpr size_t maxLeafSize = 138;

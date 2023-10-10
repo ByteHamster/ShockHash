@@ -2,6 +2,7 @@
 #include <cstdint>
 #include <vector>
 
+namespace shockhash {
 class CuckooUnionFind {
     private:
         static constexpr uint32_t EMPTY = ~uint32_t(0);
@@ -40,3 +41,4 @@ class CuckooUnionFind {
             return false;
         }
 };
+} // namespace shockhash
