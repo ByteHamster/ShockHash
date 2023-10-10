@@ -154,12 +154,12 @@ class RotatingSeedCandidateFinder {
                 for (size_t i = 0; i < sizeSetA; i++) {
                     uint64_t hash = util::remix(keys[i] + currentSeed);
                     seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    takenA |= mask_half_t<leafSize>(1) << seedCache.hashes[i];
+                    takenA |= 1ul << seedCache.hashes[i];
                 }
                 for (size_t i = sizeSetA; i < leafSize; i++) {
                     uint64_t hash = util::remix(keys[i] + currentSeed);
                     seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
-                    takenB |= mask_half_t<leafSize>(1) << seedCache.hashes[i];
+                    takenB |= 1ul << seedCache.hashes[i];
                 }
             }
         }
