@@ -498,10 +498,12 @@ using QuadSplitCandidateFinderBuckets = QuadSplitCandidateFinder<CandidateBucket
 template <size_t leafSize, bool isolatedVertexFilter = false,
         template<size_t, bool> typename SeedCandidateFinder = BasicSeedCandidateFinder>
 class BijectionsShockHash2 {
+    private:
+        using CandidateFinder = SeedCandidateFinder<leafSize, isolatedVertexFilter>;
     public:
         static inline size_t findSeed(const std::vector<uint64_t> &keys) {
             assert(keys.size() == leafSize);
-            SeedCandidateFinder<leafSize, isolatedVertexFilter> seedCandidateFinder(keys);
+            CandidateFinder seedCandidateFinder(keys);
             std::vector<SeedCache<leafSize, isolatedVertexFilter>> seedsCandidates;
             seedsCandidates.push_back(seedCandidateFinder.next());
             CuckooUnionFind unionFind(leafSize);
@@ -520,8 +522,8 @@ class BijectionsShockHash2 {
                     size_t i = 0;
                     unionFind.clear();
                     for (; i < leafSize; i++) {
-                        size_t end1 = other.hashes[i];
-                        size_t end2 = newCandidateShifted.hashes[i];
+                        size_t end1 = newCandidateShifted.hashes[i];
+                        size_t end2 = other.hashes[i];
                         if (!unionFind.unionIsStillPseudoforest(end1, end2)) {
                             break;
                         }
@@ -556,14 +558,14 @@ class BijectionsShockHash2 {
             table.clearPlacement();
             for (size_t k = 0; k < leafSize; k++) {
                 shockhash::TinyBinaryCuckooHashTable::CandidateCells candidateCells;
-                candidateCells.cell1 = SeedCandidateFinder<leafSize, isolatedVertexFilter>::hash(table.heap[k].hash.mhc, seed1) + leafSize / 2;
-                candidateCells.cell2 = SeedCandidateFinder<leafSize, isolatedVertexFilter>::hash(table.heap[k].hash.mhc, seed2);
+                candidateCells.cell1 = CandidateFinder::hash(table.heap[k].hash.mhc, seed1) + leafSize / 2;
+                candidateCells.cell2 = CandidateFinder::hash(table.heap[k].hash.mhc, seed2);
                 if (!table.insert(&table.heap[k], candidateCells)) {
                     throw std::logic_error("Should be possible to construct");
                 }
             }
             for (size_t k = 0; k < leafSize; k++) {
-                size_t candidate2 = SeedCandidateFinder<leafSize, isolatedVertexFilter>::hash(table.heap[k].hash.mhc, seed2);
+                size_t candidate2 = CandidateFinder::hash(table.heap[k].hash.mhc, seed2);
                 if (table.cells[candidate2] == &table.heap[k]) {
                     retrieval.emplace_back(table.heap[k].hash.mhc, 1);
                 } else {
@@ -576,9 +578,9 @@ class BijectionsShockHash2 {
             auto [seed1, seed2] = unpairTriangular(seed);
             size_t result;
             if (retrieved == 0) {
-                result = SeedCandidateFinder<leafSize, isolatedVertexFilter>::hash(key, seed1) + leafSize / 2;
+                result = CandidateFinder::hash(key, seed1) + leafSize / 2;
             } else {
-                result = SeedCandidateFinder<leafSize, isolatedVertexFilter>::hash(key, seed2);
+                result = CandidateFinder::hash(key, seed2);
             }
             assert(result <= leafSize);
             return result;
@@ -620,7 +622,7 @@ class BijectionsShockHash2 {
         static std::string name() {
             return std::string("ShockHash2")
                     + (isolatedVertexFilter ? "Filter" : "")
-                    + SeedCandidateFinder<leafSize, isolatedVertexFilter>::name();
+                    + CandidateFinder::name();
         }
 };
 } // namespace shockhash
