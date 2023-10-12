@@ -34,4 +34,8 @@ class BijectionsShockHash1 {
             }
             return x;
         }
+
+        static std::string name() {
+            return "ShockHash";
+        }
 };

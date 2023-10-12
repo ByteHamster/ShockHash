@@ -96,4 +96,8 @@ class BijectionsRotate {
                 }
             }
         }
+
+        static std::string name() {
+            return std::string("RecSplitRotate") + (useLookupTable ? "Lookup" : "");
+        }
 };

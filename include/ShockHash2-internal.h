@@ -100,6 +100,10 @@ class BasicSeedCandidateFinder {
         static size_t hash(uint64_t key, uint64_t seed) {
             return util::fastrange64(util::remix(key + seed), (leafSize + 1) / 2);
         }
+
+        static std::string name() {
+            return "Basic";
+        }
 };
 
 template <size_t leafSize, bool isolatedVertexFilter = false>
@@ -174,6 +178,10 @@ class RotatingSeedCandidateFinder {
             } else {
                 return (baseHash + rotation) % ((leafSize + 1) / 2);
             }
+        }
+
+        static std::string name() {
+            return "Rotate";
         }
 };
 
@@ -262,6 +270,10 @@ class CandidateList {
 
         FilteredListType filter(uint64_t mask) {
             return FilteredListType(*this, mask);
+        }
+
+        static std::string name() {
+            return "List";
         }
 };
 
@@ -365,6 +377,10 @@ class CandidateBuckets {
         FilteredListType filter(uint64_t mask) {
             return FilteredListType(*this, mask);
         }
+
+        static std::string name() {
+            return "Buckets" + std::to_string(BUCKET_MASK + 1);
+        }
 };
 
 template <template<size_t> typename CandidateList, size_t leafSize, bool isolatedVertexFilter = false>
@@ -461,6 +477,11 @@ class QuadSplitCandidateFinder {
             } else {
                 return util::fastrange64(util::remix(key + seedB), (leafSize + 1) / 2);
             }
+        }
+
+        static std::string name() {
+            return std::string("QuadSplit")
+                   + CandidateList<leafSize>::name();
         }
 };
 
@@ -594,6 +615,12 @@ class BijectionsShockHash2 {
             #endif
             // End: Validity check
             return seed;
+        }
+
+        static std::string name() {
+            return std::string("ShockHash2")
+                    + (isolatedVertexFilter ? "Filter" : "")
+                    + SeedCandidateFinder<leafSize, isolatedVertexFilter>::name();
         }
 };
 } // namespace shockhash

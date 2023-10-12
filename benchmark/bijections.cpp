@@ -11,7 +11,11 @@
 
 template<size_t leafSize, class T>
 void testSingle(size_t iterations) {
-    std::cout << " iterations=" << iterations << std::flush;
+    std::cout << "RESULT"
+              << " l=" << (int)leafSize
+              << " name=" << T::name()
+              << " iterations=" << iterations
+              << std::flush;
     T t;
     std::vector<uint64_t> leaf(leafSize);
     util::XorShift64 prng;
@@ -40,40 +44,23 @@ template<uint8_t leafSize>
 void test() {
     using namespace shockhash;
     size_t iterationsShockHash = 4 * std::pow(1.11, 128.0 - leafSize);
-    size_t iterationsRecSplit  = 4 * std::pow(1.55, 28.0 - leafSize);
+    //size_t iterationsRecSplit  = 4 * std::pow(1.55, 28.0 - leafSize);
 
-    if constexpr (leafSize <= 20) {
-        std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplit"<<std::flush;
-        testSingle<leafSize, BijectionsRecSplit<leafSize>>(iterationsRecSplit / 10);
-
-        std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplitRotate"<<std::flush;
-        testSingle<leafSize, BijectionsRotate<leafSize, false>>(iterationsRecSplit);
-
-        //std::cout<<"RESULT l="<<(int)leafSize<<" name=RecSplitRotateLookup"<<std::flush;
+    if constexpr (leafSize <= 24) {
+        //testSingle<leafSize, BijectionsRecSplit<leafSize>>(iterationsRecSplit / 10);
+        //testSingle<leafSize, BijectionsRotate<leafSize, false>>(iterationsRecSplit);
         //testSingle<leafSize, BijectionsRotate<leafSize, true>>(iterationsRecSplit);
     }
 
     if constexpr (leafSize < 64) {
-        //std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash"<<std::flush;
         //testSingle<leafSize, BijectionsShockHash1<leafSize>>(iterationsShockHash / 10);
-
-        std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHashRotate"<<std::flush;
-        testSingle<leafSize, BijectionsShockHash1Rotate<leafSize>>(iterationsShockHash / 10);
+        //testSingle<leafSize, BijectionsShockHash1Rotate<leafSize>>(iterationsShockHash / 10);
     }
 
-    std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2"<<std::flush;
-    testSingle<leafSize, BijectionsShockHash2<leafSize, false, BasicSeedCandidateFinder>>(iterationsShockHash);
-
-    std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2Filter"<<std::flush;
-    testSingle<leafSize, BijectionsShockHash2<leafSize, true, BasicSeedCandidateFinder>>(iterationsShockHash);
-
-    //std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2RotateFilter"<<std::flush;
+    //testSingle<leafSize, BijectionsShockHash2<leafSize, false, BasicSeedCandidateFinder>>(iterationsShockHash);
+    //testSingle<leafSize, BijectionsShockHash2<leafSize, true, BasicSeedCandidateFinder>>(iterationsShockHash);
     //testSingle<leafSize, BijectionsShockHash2<leafSize, true, RotatingSeedCandidateFinder>>(iterationsShockHash);
-
-    std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2QuadSplitFilter"<<std::flush;
     testSingle<leafSize, BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderList>>(iterationsShockHash);
-
-    //std::cout<<"RESULT l="<<(int)leafSize<<" name=ShockHash2QuadSplitBucketsFilter"<<std::flush;
     //testSingle<leafSize, BijectionsShockHash2<leafSize, true, QuadSplitCandidateFinderBuckets>>(iterationsShockHash);
 
     std::cout<<std::endl;

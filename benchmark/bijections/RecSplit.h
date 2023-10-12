@@ -59,4 +59,8 @@ class BijectionsRecSplit {
                 }
             }
         }
+
+        static std::string name() {
+            return "RecSplit";
+        }
 };

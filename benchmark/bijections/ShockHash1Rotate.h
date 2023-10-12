@@ -76,4 +76,8 @@ class BijectionsShockHash1Rotate {
                 }
             }
         }
+
+        static std::string name() {
+            return "ShockHashRotate";
+        }
 };
