@@ -71,7 +71,7 @@ class BijectionsShockHash1Rotate {
                         }
                     }
                     if (i == leafSize) {
-                        return ceil(log2((x * leafSize + r) + 1));
+                        return x * leafSize + r;
                     }
                 }
             }

@@ -35,7 +35,7 @@ class BijectionsRecSplit {
                         mask |= uint32_t(1) << util::fastrange16(util::remix(keys[i] + x), leafSize);
                     }
                     if (mask == found) {
-                        return ceil(log2(x + 1));
+                        return x;
                     }
                     x++;
                 }
@@ -52,7 +52,7 @@ class BijectionsRecSplit {
                             mask |= uint32_t(1) << util::fastrange16(util::remix(keys[i] + x), leafSize);
                         }
                         if (mask == found) {
-                            return ceil(log2(x + 1));
+                            return x;
                         }
                     }
                     x++;

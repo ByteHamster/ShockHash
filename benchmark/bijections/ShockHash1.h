@@ -32,6 +32,6 @@ class BijectionsShockHash1 {
                 if (tinyBinaryCuckooHashTable.construct(x)) break;
                 x++;
             }
-            return ceil(log2(x + 1));
+            return x;
         }
 };

@@ -592,7 +592,7 @@ class BijectionsShockHash2 {
                 verify(seed, keys, retrieval);
             #endif
             // End: Validity check
-            return ceil(log2(seed + 1));
+            return seed;
         }
 };
 } // namespace shockhash

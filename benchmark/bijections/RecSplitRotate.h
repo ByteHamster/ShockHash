@@ -47,7 +47,7 @@ class BijectionsRotate {
         }
 
         inline double calculateBijection(std::vector<uint64_t> &keys) {
-            static_assert(leafSize <= 16, "Using uint16_t, so 16 is the maximum leaf size");
+            static_assert(leafSize <= 32, "Using uint32_t, so 32 is the maximum leaf size");
 
             // Split objects into two groups ("left" and "right")
             int itemsLeftCount = 0;
@@ -63,33 +63,33 @@ class BijectionsRotate {
                 }
             }
 
-            constexpr uint16_t found = uint16_t(1<<leafSize) - 1;
+            constexpr uint32_t found = uint32_t(1<<leafSize) - 1;
             for (int x = 0; true; x += leafSize) {
-                uint16_t maskLeft = 0;
-                uint16_t maskRight = 0;
+                uint32_t maskLeft = 0;
+                uint32_t maskRight = 0;
                 for (size_t i = 0; i < itemsLeftCount; i++) {
-                    maskLeft |= uint16_t(1) << util::fastrange16(util::remix(itemsLeft[i] + x), leafSize);
+                    maskLeft |= uint32_t(1) << util::fastrange16(util::remix(itemsLeft[i] + x), leafSize);
                 }
                 if (sux::nu(maskLeft) != itemsLeftCount) {
                     continue; // Collisions in left part
                 }
                 for (size_t i1 = 0; i1 < itemsRightCount; i1++) {
-                    maskRight |= uint16_t(1) << util::fastrange16(util::remix(itemsRight[i1] + x), leafSize);
+                    maskRight |= uint32_t(1) << util::fastrange16(util::remix(itemsRight[i1] + x), leafSize);
                 }
                 if (sux::nu(maskRight) != itemsRightCount) {
                     continue; // Collisions in right part
                 }
                 // Try to rotate right part to see if both together form a bijection
                 if constexpr (useLookupTable) {
-                    uint8_t rotations = (normalize_rotations[uint16_t(~maskRight) & found]
+                    uint8_t rotations = (normalize_rotations[uint32_t(~maskRight) & found]
                                          - normalize_rotations[maskLeft] + leafSize) % leafSize;
                     if (found == (maskLeft | rotate(maskRight, rotations))) {
-                        return ceil(log2(x + rotations + 1));
+                        return x + rotations;
                     }
                 } else {
                     for (int rotations = 0; rotations < leafSize; rotations++) {
                         if (found == (maskLeft | maskRight)) {
-                            return ceil(log2(x + rotations + 1));
+                            return x + rotations;
                         }
                         maskRight = rotate(maskRight, 1);
                     }
