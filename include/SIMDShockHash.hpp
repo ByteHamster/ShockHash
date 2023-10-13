@@ -121,8 +121,6 @@ class SIMDShockHash {
     DoubleEF<AT> ef;
     using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
     Ribbon *ribbon = nullptr;
-    std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
-    std::mutex ribbonInputMtx;
 
   public:
     SIMDShockHash() {}
@@ -404,7 +402,8 @@ class SIMDShockHash {
     }
 
     void leafLevel(vector<uint64_t> &bucket, size_t start, size_t m, typename RiceBitVector<AT>::Builder &builder,
-            vector<uint32_t> &unary, [[maybe_unused]] const int level, TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
+            vector<uint32_t> &unary, [[maybe_unused]] const int level, TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable,
+            std::vector<std::pair<uint64_t, uint8_t>> &ribbonInput) {
         assert(m >= 2);
         assert(m <= LEAF_SIZE);
         const auto end = start + m;
@@ -479,31 +478,28 @@ class SIMDShockHash {
                 }
             }
             storeOrientation:
-            {
-                std::lock_guard<std::mutex> guard(ribbonInputMtx);
-                for (size_t i = 0; i < m; i++) {
-                    auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
-                    size_t cell = i;
-                    if ((hash.mhc & 1) == 1) {
-                        // Set B
-                        cell = (cell - r + m) % m;
-                    }
-                    // Use fact that first hash function is < m/2 (see getCandidateCells)
-                    ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
-                    #ifndef NDEBUG
-                    TinyBinaryCuckooHashTable::CandidateCells candidateCells;
-                    if ((hash.mhc & 1) == 0) {
-                        // Set A
-                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(hash, x & (~GROUP_A_HF_MASK));
-                    } else {
-                        // Set B
-                        candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(hash, x);
-                        candidateCells.cell1 = (candidateCells.cell1 + r) % m;
-                        candidateCells.cell2 = (candidateCells.cell2 + r) % m;
-                    }
-                    assert(i == candidateCells.cell1 || i == candidateCells.cell2);
-                    #endif
+            for (size_t i = 0; i < m; i++) {
+                auto hash = tinyBinaryCuckooHashTable.cells[i]->hash;
+                size_t cell = i;
+                if ((hash.mhc & 1) == 1) {
+                    // Set B
+                    cell = (cell - r + m) % m;
                 }
+                // Use fact that first hash function is < m/2 (see getCandidateCells)
+                ribbonInput.emplace_back(hash.mhc, (cell < m / 2) ? 0 : 1);
+                #ifndef NDEBUG
+                TinyBinaryCuckooHashTable::CandidateCells candidateCells;
+                if ((hash.mhc & 1) == 0) {
+                    // Set A
+                    candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(hash, x & (~GROUP_A_HF_MASK));
+                } else {
+                    // Set B
+                    candidateCells = TinyBinaryCuckooHashTable::getCandidateCells<LEAF_SIZE>(hash, x);
+                    candidateCells.cell1 = (candidateCells.cell1 + r) % m;
+                    candidateCells.cell2 = (candidateCells.cell2 + r) % m;
+                }
+                assert(i == candidateCells.cell1 || i == candidateCells.cell2);
+                #endif
             }
             x -= SEED;
             x = x * LEAF_SIZE + r;
@@ -536,13 +532,10 @@ class SIMDShockHash {
                 x += offset;
                 xVec += offset;
             }
-            {
-                std::lock_guard<std::mutex> guard(ribbonInputMtx);
-                for (size_t i = 0; i < m; i++) {
-                    size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(
-                            tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
-                    ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
-                }
+            for (size_t i = 0; i < m; i++) {
+                size_t cell1 = shockhash::TinyBinaryCuckooHashTable::hashToCell(
+                        tinyBinaryCuckooHashTable.cells[i]->hash, x, m, 0);
+                ribbonInput.emplace_back(tinyBinaryCuckooHashTable.cells[i]->hash.mhc, i == cell1 ? 0 : 1);
             }
             x -= SEED;
         }
@@ -568,17 +561,18 @@ class SIMDShockHash {
 
     void recSplit(vector<uint64_t> &bucket, vector<uint64_t> &temp, size_t start, size_t m,
             typename RiceBitVector<AT>::Builder &builder, vector<uint32_t> &unary, const int level,
-            TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable) {
+            TinyBinaryCuckooHashTable &tinyBinaryCuckooHashTable,
+            std::vector<std::pair<uint64_t, uint8_t>> &ribbonInput) {
         assert(m > 1);
         if (m <= _leaf) {
-            leafLevel(bucket, start, m, builder, unary, level, tinyBinaryCuckooHashTable);
+            leafLevel(bucket, start, m, builder, unary, level, tinyBinaryCuckooHashTable, ribbonInput);
         } else {
             [[maybe_unused]] uint64_t x;
             if (m > upper_aggr) { // fanout = 2
                 const size_t split = ((uint16_t(m / 2 + upper_aggr - 1) / upper_aggr)) * upper_aggr;
                 x = higherLevel(bucket, temp, start, m, split, builder, unary, level);
-                recSplit(bucket, temp, start, split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
-                if (m - split > 1) recSplit(bucket, temp, start + split, m - split, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                recSplit(bucket, temp, start, split, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
+                if (m - split > 1) recSplit(bucket, temp, start + split, m - split, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
 #ifdef MORESTATS
                 else
                     sum_depths += level;
@@ -587,9 +581,9 @@ class SIMDShockHash {
                 x = aggrLevel<upper_aggr / lower_aggr, lower_aggr, start_seed[NUM_START_SEEDS - 3]>(bucket, temp, start, m, builder, unary, level);
                 size_t i;
                 for (i = 0; i < m - lower_aggr; i += lower_aggr) {
-                    recSplit(bucket, temp, start + i, lower_aggr, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    recSplit(bucket, temp, start + i, lower_aggr, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                 }
-                if (m - i > 1) recSplit(bucket, temp, start + i, m - i, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                if (m - i > 1) recSplit(bucket, temp, start + i, m - i, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
 #ifdef MORESTATS
                 else
                     sum_depths += level;
@@ -598,9 +592,9 @@ class SIMDShockHash {
                 x = aggrLevel<lower_aggr / _leaf, _leaf, start_seed[NUM_START_SEEDS - 2]>(bucket, temp, start, m, builder, unary, level);
                 size_t i;
                 for (i = 0; i < m - _leaf; i += _leaf) {
-                    leafLevel(bucket, start + i, _leaf, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                    leafLevel(bucket, start + i, _leaf, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                 }
-                if (m - i > 1) leafLevel(bucket, start + i, m - i, builder, unary, level + 1, tinyBinaryCuckooHashTable);
+                if (m - i > 1) leafLevel(bucket, start + i, m - i, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
 #ifdef MORESTATS
                 else
                     sum_depths += level;
@@ -624,7 +618,8 @@ class SIMDShockHash {
     void compute_thread(int tid, int num_threads, mutex &mtx, std::condition_variable &condition,
                         vector<uint64_t> &bucket_size_acc, vector<uint64_t> &bucket_pos_acc,
                         vector<uint64_t> &sorted_keys, int &next_thread_to_append_builder,
-                        typename shockhash::RiceBitVector<AT>::Builder &builder) {
+                        typename shockhash::RiceBitVector<AT>::Builder &builder,
+                        std::vector<std::pair<uint64_t, uint8_t>> &ribbonInput) {
         typename shockhash::RiceBitVector<AT>::Builder local_builder;
         TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
         vector<uint32_t> unary;
@@ -637,8 +632,8 @@ class SIMDShockHash {
         for (size_t i = begin; i < end; ++i) {
             const size_t s = bucket_size_acc[i + 1] - bucket_size_acc[i];
             if (s > 1) {
-                recSplit(sorted_keys, temp, bucket_size_acc[i], bucket_size_acc[i + 1], local_builder,
-                         unary, 0, tinyBinaryCuckooHashTable);
+                recSplit(sorted_keys, temp, bucket_size_acc[i], s, local_builder,
+                         unary, 0, tinyBinaryCuckooHashTable, ribbonInput);
                 local_builder.appendUnaryAll(unary);
                 unary.clear();
             }
@@ -692,6 +687,7 @@ class SIMDShockHash {
         auto bucket_pos_acc = vector<uint64_t>(nbuckets + 1);
         auto sorted_keys = vector<uint64_t>(keys_count);
         TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(LEAF_SIZE);
+        std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
         ribbonInput.reserve(keys_count);
 
         parallelPartition(hashes, sorted_keys, bucket_size_acc, num_threads, keys_count, nbuckets);
@@ -706,17 +702,21 @@ class SIMDShockHash {
         if (num_threads == 1) {
             compute_thread(0, num_threads, mtx, condition,
                            bucket_size_acc, bucket_pos_acc, sorted_keys,
-                           next_thread_to_append_builder, builder);
+                           next_thread_to_append_builder, builder, ribbonInput);
         } else {
+            std::vector<std::vector<std::pair<uint64_t, uint8_t>>> ribbonInputs;
+            ribbonInputs.resize(num_threads);
             for (int tid = 0; tid < num_threads; ++tid) {
+                ribbonInputs.at(tid).reserve(keys_count / num_threads);
                 threads.emplace_back([&, tid] {
                     compute_thread(tid, num_threads, mtx, condition,
                                    bucket_size_acc, bucket_pos_acc, sorted_keys,
-                                   next_thread_to_append_builder, builder);
+                                   next_thread_to_append_builder, builder, ribbonInputs.at(tid));
                 });
             }
-            for (auto &thread: threads) {
-                thread.join();
+            for (int tid = 0; tid < num_threads; ++tid) {
+                threads.at(tid).join();
+                ribbonInput.insert(ribbonInput.end(), ribbonInputs.at(tid).begin(), ribbonInputs.at(tid).end());
             }
         }
         builder.appendFixed(1, 1); // Sentinel (avoids checking for parts of size 1)
