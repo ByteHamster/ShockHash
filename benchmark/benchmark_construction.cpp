@@ -3,6 +3,7 @@
 #include <XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
 #include "BenchmarkData.h"
+#include "ShockHash2.h"
 #ifdef SIMD
 #include "SIMDShockHash.hpp"
 template <size_t l>
@@ -10,6 +11,8 @@ using ShockHash = shockhash::SIMDShockHash<l, false>;
 template <size_t l>
 using ShockHashRotate = shockhash::SIMDShockHash<l, true>;
 #else
+//#define STATS
+//#define MORESTATS
 #include "ShockHash.h"
 template <size_t l>
 using ShockHash = shockhash::ShockHash<l, false>;
@@ -20,10 +23,12 @@ using ShockHashRotate = shockhash::ShockHash<l, true>;
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
 
 bool rotate = false;
+bool shockhash2 = false;
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
 size_t leafSize = 20;
 size_t bucketSize = 2000;
+size_t threads = 1;
 
 template<typename HashFunc>
 void construct() {
@@ -43,16 +48,16 @@ void construct() {
 
     std::cout<<"Constructing"<<std::endl;
     auto beginConstruction = std::chrono::high_resolution_clock::now();
-    HashFunc hashFunc(keys, bucketSize);
+    HashFunc hashFunc(keys, bucketSize, threads);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginConstruction).count();
 
     std::cout<<"Testing"<<std::endl;
     std::vector<bool> taken(keys.size(), false);
-    for (auto key : keys) {
-        size_t hash = hashFunc(key);
+    for (size_t i = 0; i < keys.size(); i++) {
+        size_t hash = hashFunc(keys.at(i));
         if (taken[hash]) {
-            std::cerr << "Collision!" << std::endl;
+            std::cerr << "Collision by key " << i << "!" << std::endl;
             exit(1);
         } else if (hash > numObjects) {
             std::cerr << "Out of range!" << std::endl;
@@ -79,10 +84,11 @@ void construct() {
               #else
               << " method=plain"
               #endif
-                << (rotate ? "Rotate" : "")
+                << (rotate ? "Rotate" : (shockhash2 ? "2" : ""))
               << " l=" << leafSize
               << " b=" << bucketSize
               << " N=" << numObjects
+              << " threads=" << threads
               << " numQueries=" << numQueries
               << " queryTimeMilliseconds=" << queryDurationMs
               << " constructionTimeMilliseconds=" << constructionDurationMs
@@ -97,7 +103,7 @@ void dispatchLeafSize(size_t param) {
     } else if (I == param) {
         construct<RecSplit<I>>();
     } else {
-        dispatchLeafSize<RecSplit, I - 1>(param);
+        dispatchLeafSize<RecSplit, I - 2>(param);
     }
 }
 
@@ -108,6 +114,8 @@ int main(int argc, const char* const* argv) {
     cmd.add_bytes('l', "leafSize", leafSize, "Leaf size to construct");
     cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
     cmd.add_bool('r', "rotate", rotate, "Apply rotation fitting");
+    cmd.add_bool('2', "shockhash2", shockhash2, "ShockHash2");
+    cmd.add_bytes('t', "threads", threads, "Number of threads");
 
     if (!cmd.process(argc, argv)) {
         return 1;
@@ -115,6 +123,8 @@ int main(int argc, const char* const* argv) {
 
     if (rotate) {
         dispatchLeafSize<ShockHashRotate, shockhash::MAX_LEAF_SIZE>(leafSize);
+    } else if (shockhash2) {
+        dispatchLeafSize<shockhash::ShockHash2, shockhash::MAX_LEAF_SIZE2>(leafSize);
     } else {
         dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
     }

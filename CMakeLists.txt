@@ -2,7 +2,8 @@ cmake_minimum_required (VERSION 3.16)
 cmake_policy(SET CMP0048 NEW)
 project(ShockHash LANGUAGES CXX)
 
-if(CMAKE_BUILD_TYPE STREQUAL "Release" AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if((CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+        AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     add_compile_options(-march=native)
 endif()
 
@@ -44,10 +45,16 @@ endif()
 
 # ---------------------------- Library Setup ----------------------------
 
+add_library(ShockHash2Precompiled SHARED src/ShockHash2-precompiled.cpp)
+target_compile_features(ShockHash2Precompiled PRIVATE cxx_std_20)
+target_include_directories(ShockHash2Precompiled PRIVATE include)
+target_link_libraries(ShockHash2Precompiled PUBLIC ips2ra tlx Sux ByteHamsterUtil)
+target_compile_options(ShockHash2Precompiled PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-march=native>)
+
 add_library(ShockHash INTERFACE)
 target_include_directories(ShockHash INTERFACE include)
 target_compile_features(ShockHash INTERFACE cxx_std_20)
-target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter ByteHamsterUtil)
+target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter ByteHamsterUtil ShockHash2Precompiled)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/extlib/cmake-findsse/FindSSE.cmake)
 FindSSE()
@@ -77,4 +84,10 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
 
     add_executable(NumHashEvals benchmark/numHashEvals.cpp)
     target_link_libraries(NumHashEvals PUBLIC BenchmarkUtils)
+
+    add_executable(Bijections benchmark/bijections.cpp)
+    target_link_libraries(Bijections PUBLIC ShockHash BenchmarkUtils)
+
+    add_executable(GolombMemoTuner benchmark/golombMemoTuner.cpp)
+    target_link_libraries(GolombMemoTuner PUBLIC ShockHash BenchmarkUtils)
 endif()
