@@ -10,7 +10,7 @@
 /**
  * Alternative method of finding bijections that rotates two halves.
  */
-template <uint8_t leafSize, bool useLookupTable>
+template <size_t leafSize, bool useLookupTable>
 class BijectionsRotate {
     public:
         // Only used when useLookupTable is true.
@@ -18,24 +18,27 @@ class BijectionsRotate {
         // For two numbers (x,y) that can be rotated to match, we get:
         // rotate(x, normalize_rotations[x]) == rotate(y, normalize_rotations[y]).
         // To calculate how many times to rotate y to match x, we can subtract the number of rotations.
-        uint8_t normalize_rotations[1<<leafSize] = {0};
+        std::vector<uint8_t> normalize_rotations;
 
         static inline constexpr uint16_t rotate(uint16_t val, uint8_t x) {
-            return ((val << x) | (val >> (leafSize - x))) & ((1<<leafSize) - 1);
+            return ((val << x) | (val >> (leafSize - x))) & ((1u<<leafSize) - 1);
         }
 
         // Temporary variables
-        uint64_t itemsLeft[leafSize] = {0};
-        uint64_t itemsRight[leafSize] = {0};
+        std::vector<uint64_t> itemsLeft;
+        std::vector<uint64_t> itemsRight;
 
         BijectionsRotate() {
+            itemsLeft.resize(leafSize);
+            itemsRight.resize(leafSize);
             if constexpr (useLookupTable) {
                 // This can probably be more efficient and calculated at compile time
-                for (uint16_t pos = 1; pos != uint16_t(1<<leafSize); pos++) {
+                normalize_rotations.resize((1ul << leafSize) + 1);
+                for (uint16_t pos = 1; pos != uint16_t(1ul << leafSize); pos++) {
                     uint16_t x = pos;
                     uint16_t min = x;
                     normalize_rotations[pos] = 0;
-                    for (uint8_t i = 0; i < leafSize; i++) {
+                    for (size_t i = 0; i < leafSize; i++) {
                         x = rotate(x, 1);
                         if (x < min) {
                             min = x;
