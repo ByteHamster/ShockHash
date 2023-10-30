@@ -20,7 +20,7 @@ class BijectionsRotate {
         // To calculate how many times to rotate y to match x, we can subtract the number of rotations.
         std::vector<uint8_t> normalize_rotations;
 
-        static inline constexpr uint16_t rotate(uint16_t val, uint8_t x) {
+        static inline constexpr uint32_t rotate(uint32_t val, uint8_t x) {
             return ((val << x) | (val >> (leafSize - x))) & ((1u<<leafSize) - 1);
         }
 
@@ -34,27 +34,27 @@ class BijectionsRotate {
             if constexpr (useLookupTable) {
                 // This can probably be more efficient and calculated at compile time
                 normalize_rotations.resize((1ul << leafSize) + 1);
-                for (uint16_t pos = 1; pos != uint16_t(1ul << leafSize); pos++) {
-                    uint16_t x = pos;
-                    uint16_t min = x;
+                for (uint32_t pos = 1; pos != uint32_t(1ul << leafSize); pos++) {
+                    uint32_t x = pos;
+                    uint32_t min = x;
                     normalize_rotations[pos] = 0;
                     for (size_t i = 0; i < leafSize; i++) {
-                        x = rotate(x, 1);
                         if (x < min) {
                             min = x;
-                            normalize_rotations[pos] = i + 1;
+                            normalize_rotations[pos] = i;
                         }
+                        x = rotate(x, 1);
                     }
                 }
             }
         }
 
-        inline double calculateBijection(std::vector<uint64_t> &keys) {
+        inline size_t calculateBijection(std::vector<uint64_t> &keys) {
             static_assert(leafSize <= 32, "Using uint32_t, so 32 is the maximum leaf size");
 
             // Split objects into two groups ("left" and "right")
-            int itemsLeftCount = 0;
-            int itemsRightCount = 0;
+            size_t itemsLeftCount = 0;
+            size_t itemsRightCount = 0;
             for (int i = 0; i < leafSize; i++) {
                 bool isLeft = (util::remix(keys[i] - 1) % 2) == 0;
                 if (isLeft) {
@@ -67,19 +67,19 @@ class BijectionsRotate {
             }
 
             constexpr uint32_t found = uint32_t(1<<leafSize) - 1;
-            for (int x = 0; true; x += leafSize) {
+            for (size_t x = 0; true; x += leafSize) {
                 uint32_t maskLeft = 0;
                 uint32_t maskRight = 0;
                 for (size_t i = 0; i < itemsLeftCount; i++) {
                     maskLeft |= uint32_t(1) << util::fastrange16(util::remix(itemsLeft[i] + x), leafSize);
                 }
-                if (sux::nu(maskLeft) != itemsLeftCount) {
+                if ((size_t) sux::nu(maskLeft) != itemsLeftCount) {
                     continue; // Collisions in left part
                 }
                 for (size_t i1 = 0; i1 < itemsRightCount; i1++) {
                     maskRight |= uint32_t(1) << util::fastrange16(util::remix(itemsRight[i1] + x), leafSize);
                 }
-                if (sux::nu(maskRight) != itemsRightCount) {
+                if ((size_t) sux::nu(maskRight) != itemsRightCount) {
                     continue; // Collisions in right part
                 }
                 // Try to rotate right part to see if both together form a bijection

@@ -23,7 +23,7 @@ class BijectionsRecSplit {
         }
         static constexpr std::array<uint8_t, MAX_LEAF_SIZE> bij_midstop = fill_bij_midstop();
 
-        inline double calculateBijection(std::vector<uint64_t> &keys) {
+        inline size_t calculateBijection(std::vector<uint64_t> &keys) {
             uint32_t mask;
             int x = 0;
             const uint32_t found = (1 << leafSize) - 1;

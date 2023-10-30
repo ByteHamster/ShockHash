@@ -14,7 +14,7 @@ class BijectionsShockHash1Rotate {
             return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
         }
 
-        inline double calculateBijection(std::vector<uint64_t> &keysInput) {
+        inline size_t calculateBijection(std::vector<uint64_t> &keysInput) {
             size_t x = 0;
             constexpr uint64_t allSet = (leafSize == 64) ? (~0ul) : (1ul << leafSize) - 1;
             size_t r = 0;

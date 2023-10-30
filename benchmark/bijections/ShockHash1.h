@@ -10,7 +10,7 @@ template <size_t leafSize>
 class BijectionsShockHash1 {
         static_assert(leafSize <= 64);
     public:
-        inline double calculateBijection(std::vector<uint64_t> &keys) {
+        inline size_t calculateBijection(std::vector<uint64_t> &keys) {
             shockhash::TinyBinaryCuckooHashTable tinyBinaryCuckooHashTable(leafSize);
             for (size_t i = 0; i < leafSize; i++) {
                 tinyBinaryCuckooHashTable.prepare(shockhash::HashedKey(keys[i]));
