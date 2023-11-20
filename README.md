@@ -3,7 +3,9 @@
 Small, heavily overloaded cuckoo hash tables inside the [RecSplit](https://github.com/vigna/sux/blob/master/sux/function/RecSplit.hpp) framework.
 Constructs very compact perfect hash functions significantly faster than previous approaches.
 
-<img src="https://raw.githubusercontent.com/ByteHamster/ShockHash/main/plots.png" alt="Plots preview" />
+### Construction performance
+
+[<img src="https://raw.githubusercontent.com/ByteHamster/ShockHash/main/plots.png" alt="Plots preview" />](https://arxiv.org/abs/2310.14959)
 
 ### Library Usage
 
@@ -39,7 +41,7 @@ We also give the base-case implementations without the RecSplit framework, which
 ShockHash is licensed exactly like `libstdc++` (GPLv3 + GCC Runtime Library Exception), which essentially means you can use it everywhere, exactly like `libstdc++`.
 You can find details in the [COPYING](/COPYING) and [COPYING.RUNTIME](/COPYING.RUNTIME) files.
 
-If you use ShockHash or bipartite ShockHash in an academic context or publication, please cite our papers:
+If you use [ShockHash](https://arxiv.org/abs/2308.09561) or [bipartite ShockHash](https://arxiv.org/abs/2310.14959) in an academic context or publication, please cite our papers:
 
 ```
 @misc{lehmann2023shockhash,
