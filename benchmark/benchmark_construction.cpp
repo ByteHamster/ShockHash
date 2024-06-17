@@ -3,7 +3,6 @@
 #include <XorShift64.h>
 #include <tlx/cmdline_parser.hpp>
 #include "BenchmarkData.h"
-#include "ShockHash2.h"
 #ifdef SIMD
 #include "SIMDShockHash.hpp"
 template <size_t l>
@@ -19,11 +18,14 @@ using ShockHash = shockhash::ShockHash<l, false>;
 template <size_t l>
 using ShockHashRotate = shockhash::ShockHash<l, true>;
 #endif
+#include "ShockHash2.h"
+#include "ShockHash2Flat.h"
 
 #define DO_NOT_OPTIMIZE(value) asm volatile("" : : "r,m"(value) : "memory")
 
 bool rotate = false;
 bool shockhash2 = false;
+bool shockhash2flat = false;
 size_t numObjects = 1e6;
 size_t numQueries = 1e6;
 size_t leafSize = 20;
@@ -35,7 +37,7 @@ void construct() {
     auto time = std::chrono::system_clock::now();
     long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count();
     util::XorShift64 prng(seed);
-    //#define STRING_KEYS
+    #define STRING_KEYS
     #ifdef STRING_KEYS
         std::vector<std::string> keys = generateInputData(numObjects);
     #else
@@ -47,6 +49,7 @@ void construct() {
     #endif
 
     std::cout<<"Constructing"<<std::endl;
+    sleep(1);
     auto beginConstruction = std::chrono::high_resolution_clock::now();
     HashFunc hashFunc(keys, bucketSize, threads);
     unsigned long constructionDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -66,25 +69,43 @@ void construct() {
         taken[hash] = true;
     }
 
-    std::cout<<"Querying"<<std::endl;
-    uint64_t h = 0;
-    auto beginQueries = std::chrono::high_resolution_clock::now();
+    std::cout<<"Preparing query plan"<<std::endl;
+    #ifdef STRING_KEYS
+        std::vector<std::string> queryPlan;
+    #else
+        std::vector<sux::function::hash128_t> queryPlan;
+    #endif
+    queryPlan.reserve(numQueries);
     for (size_t i = 0; i < numQueries; i++) {
-        h ^= hashFunc(sux::function::hash128_t(prng(), prng() ^ h));
+        queryPlan.push_back(keys[prng(numObjects)]);
+    }
+
+    std::cout<<"Querying"<<std::endl;
+    sleep(1);
+    auto beginQueries = std::chrono::high_resolution_clock::now();
+    for (const auto &key : queryPlan) {
+        size_t retrieved = hashFunc(key);
+        DO_NOT_OPTIMIZE(retrieved);
     }
     auto queryDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::high_resolution_clock::now() - beginQueries).count();
-    DO_NOT_OPTIMIZE(h);
 
     hashFunc.printBits();
 
+    #ifdef SIMD
+    std::string method = "SIMD";
+    #else
+    std::string method = "plain";
+    #endif
+    if (rotate) {
+        method += "Rotate";
+    } else if (shockhash2) {
+        method += "2";
+    } else if (shockhash2flat) {
+        method += "2flat";
+    }
     std::cout << "RESULT"
-              #ifdef SIMD
-              << " method=SIMD"
-              #else
-              << " method=plain"
-              #endif
-                << (rotate ? "Rotate" : (shockhash2 ? "2" : ""))
+              << " method=" << method
               << " l=" << leafSize
               << " b=" << bucketSize
               << " N=" << numObjects
@@ -115,6 +136,7 @@ int main(int argc, const char* const* argv) {
     cmd.add_bytes('b', "bucketSize", bucketSize, "Bucket size to construct");
     cmd.add_bool('r', "rotate", rotate, "Apply rotation fitting");
     cmd.add_bool('2', "shockhash2", shockhash2, "ShockHash2");
+    cmd.add_bool('f', "shockhash2flat", shockhash2flat, "ShockHash2 flat");
     cmd.add_bytes('t', "threads", threads, "Number of threads");
 
     if (!cmd.process(argc, argv)) {
@@ -125,6 +147,8 @@ int main(int argc, const char* const* argv) {
         dispatchLeafSize<ShockHashRotate, shockhash::MAX_LEAF_SIZE>(leafSize);
     } else if (shockhash2) {
         dispatchLeafSize<shockhash::ShockHash2, shockhash::MAX_LEAF_SIZE2>(leafSize);
+    } else if (shockhash2flat) {
+        dispatchLeafSize<shockhash::ShockHash2Flat, shockhash::MAX_LEAF_SIZE2>(leafSize);
     } else {
         dispatchLeafSize<ShockHash, shockhash::MAX_LEAF_SIZE>(leafSize);
     }

@@ -7,6 +7,8 @@
 #include <chrono>
 #include <set>
 #include <unordered_set>
+#include <ShockHash2-precompiled.h>
+#include <PairingFunction.h>
 
 static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
     return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);
@@ -226,15 +228,46 @@ void testShockHashRot(size_t l) {
              <<std::endl;
 }
 
+void testBipShockHash(size_t l) {
+    assert(l < 120);
+    size_t numIterations = l <= 40 ? 500000 : 50000;
+    double totalLargerPart = 0;
+    double totalSeed = 0;
+    for (size_t iteration = 0; iteration < numIterations; iteration++) {
+        std::vector<uint64_t> keys;
+        for (size_t i = 0; i < l; i++) {
+            keys.emplace_back(util::MurmurHash64(std::to_string(i) + " " + std::to_string(iteration)));
+        }
+        std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
+        // WARNING: To use this, switch to BasicSeedCandidateFinder in ShockHash2-precompiled.h!
+        uint64_t seed = shockhash::shockhash2construct(l, keys, ribbonInput);
+        auto [largerPart, smallerPart] = shockhash::unpairTriangular(seed);
+        totalSeed += seed;
+        totalLargerPart += largerPart;
+    }
+    std::cout<<"RESULT"
+             <<" method=shockhash2"
+             <<" l="<<l
+             <<" tries="<<(double)totalLargerPart / (double)numIterations
+             <<" iterations="<<numIterations
+             <<" spaceEstimate="<<log2((double)totalSeed / (double)numIterations) / l + 1
+             <<std::endl;
+}
+
 int main() {
-    for (size_t l = 5; l <= 40; l++) {
+    for (size_t l = 4; l <= 80; l += 2) {
         if (l <= 25) {
             testRotationFitting(l);
         }
         if (l <= 22) {
             testBruteForce(l);
         }
-        testShockHash(l);
-        testShockHashRot(l);
+        if (l <= 50) {
+            testShockHash(l);
+        }
+        if (l <= 60) {
+            testShockHashRot(l);
+        }
+        testBipShockHash(l);
     }
 }

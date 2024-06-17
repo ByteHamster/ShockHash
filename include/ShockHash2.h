@@ -274,7 +274,6 @@ class ShockHash2 {
                 // End: difference to RecSplit.
 
                 const auto log2golomb = golomb_param(m);
-                assert(log2golomb > 0);
                 builder.appendFixed(x, log2golomb);
                 unary.push_back(x >> log2golomb);
 

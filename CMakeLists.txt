@@ -83,7 +83,7 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     endif()
 
     add_executable(NumHashEvals benchmark/numHashEvals.cpp)
-    target_link_libraries(NumHashEvals PUBLIC BenchmarkUtils)
+    target_link_libraries(NumHashEvals PUBLIC BenchmarkUtils ShockHash)
 
     add_executable(Bijections benchmark/bijections.cpp)
     target_link_libraries(Bijections PUBLIC ShockHash BenchmarkUtils)

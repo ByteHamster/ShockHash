@@ -80,8 +80,8 @@ class BasicSeedCandidateFinder {
             while (true) {
                 uint64_t taken = 0;
                 for (size_t i = 0; i < leafSize; i++) {
-                    uint64_t hash = util::remix(keys.at(i) + currentSeed);
-                    seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
+                    uint64_t hash = ::util::remix(keys.at(i) + currentSeed);
+                    seedCache.hashes[i] = ::util::fastrange64(hash, (leafSize + 1) / 2);
                     taken |= 1ul << seedCache.hashes[i];
                 }
                 if (taken == MASK_HALF<leafSize>) {
@@ -98,7 +98,7 @@ class BasicSeedCandidateFinder {
         }
 
         static size_t hash(uint64_t key, uint64_t seed) {
-            return util::fastrange64(util::remix(key + seed), (leafSize + 1) / 2);
+            return ::util::fastrange64(::util::remix(key + seed), (leafSize + 1) / 2);
         }
 
         static std::string name() {
@@ -157,13 +157,13 @@ class RotatingSeedCandidateFinder {
                 takenA = 0;
                 takenB = 0;
                 for (size_t i = 0; i < sizeSetA; i++) {
-                    uint64_t hash = util::remix(keys[i] + currentSeed);
-                    seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
+                    uint64_t hash = ::util::remix(keys[i] + currentSeed);
+                    seedCache.hashes[i] = ::util::fastrange64(hash, (leafSize + 1) / 2);
                     takenA |= 1ul << seedCache.hashes[i];
                 }
                 for (size_t i = sizeSetA; i < leafSize; i++) {
-                    uint64_t hash = util::remix(keys[i] + currentSeed);
-                    seedCache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
+                    uint64_t hash = ::util::remix(keys[i] + currentSeed);
+                    seedCache.hashes[i] = ::util::fastrange64(hash, (leafSize + 1) / 2);
                     takenB |= 1ul << seedCache.hashes[i];
                 }
             }
@@ -172,7 +172,7 @@ class RotatingSeedCandidateFinder {
         static size_t hash(uint64_t key, uint64_t seed) {
             size_t hashSeed = seed / ((leafSize + 1) / 2);
             size_t rotation = seed % ((leafSize + 1) / 2);
-            size_t baseHash = util::fastrange64(util::remix(key + hashSeed), (leafSize + 1) / 2);
+            size_t baseHash = ::util::fastrange64(::util::remix(key + hashSeed), (leafSize + 1) / 2);
             if ((key & 1) == 0) {
                 return baseHash;
             } else {
@@ -419,12 +419,12 @@ class QuadSplitCandidateFinder {
             SeedCache<leafSize, isolatedVertexFilter> cache = {};
             cache.seed = pairElegant(seedA, seedB);
             for (size_t i = 0; i < sizeSetA; i++) {
-                uint64_t hash = util::remix(keys[i] + seedA);
-                cache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
+                uint64_t hash = ::util::remix(keys[i] + seedA);
+                cache.hashes[i] = ::util::fastrange64(hash, (leafSize + 1) / 2);
             }
             for (size_t i = sizeSetA; i < leafSize; i++) {
-                uint64_t hash = util::remix(keys[i] + seedB);
-                cache.hashes[i] = util::fastrange64(hash, (leafSize + 1) / 2);
+                uint64_t hash = ::util::remix(keys[i] + seedB);
+                cache.hashes[i] = ::util::fastrange64(hash, (leafSize + 1) / 2);
             }
             if constexpr (isolatedVertexFilter) {
                 calculateIsolatedVertices(cache);
@@ -438,12 +438,12 @@ class QuadSplitCandidateFinder {
             uint64_t takenA = 0;
             uint64_t takenB = 0;
             for (size_t i = 0; i < sizeSetA; i++) {
-                uint64_t hash = util::remix(keys[i] + currentSeed);
-                takenA |= 1ul << util::fastrange64(hash, (leafSize + 1) / 2);
+                uint64_t hash = ::util::remix(keys[i] + currentSeed);
+                takenA |= 1ul << ::util::fastrange64(hash, (leafSize + 1) / 2);
             }
             for (size_t i = sizeSetA; i < leafSize; i++) {
-                uint64_t hash = util::remix(keys[i] + currentSeed);
-                takenB |= 1ul << util::fastrange64(hash, (leafSize + 1) / 2);
+                uint64_t hash = ::util::remix(keys[i] + currentSeed);
+                takenB |= 1ul << ::util::fastrange64(hash, (leafSize + 1) / 2);
             }
 
             for (const auto [candidateSeed, candidateMask] : candidatesA.filter(takenB)) {
@@ -472,11 +472,8 @@ class QuadSplitCandidateFinder {
 
         static size_t hash(uint64_t key, uint64_t seed) {
             auto [seedA, seedB] = unpairElegant(seed);
-            if ((key & 1) == 0) {
-                return util::fastrange64(util::remix(key + seedA), (leafSize + 1) / 2);
-            } else {
-                return util::fastrange64(util::remix(key + seedB), (leafSize + 1) / 2);
-            }
+            uint64_t seedToUse = ((key & 1) == 0) ? seedA : seedB;
+            return ::util::fastrange64(::util::remix(key + seedToUse), (leafSize + 1) / 2);
         }
 
         static std::string name() {

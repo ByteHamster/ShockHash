@@ -2,12 +2,15 @@
 
 #include <sux/function/RecSplit.hpp>
 #include <vector>
+#include "ShockHash2FlatBase.h"
 
 namespace shockhash {
     /**
      * Moving sorting to its own compile unit brings compile times from minutes to seconds.
      */
     void sort_hash128_t(sux::function::hash128_t *objects, size_t n, size_t threads);
+
+    void sort_keyInfo(std::vector<KeyInfo> &hashes);
 
     void parallelPartition(sux::function::hash128_t *input, std::vector<uint64_t> &sorted,
                            std::vector<uint64_t> &bucket_size_acc, size_t num_threads,
