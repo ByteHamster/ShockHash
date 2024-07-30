@@ -131,7 +131,7 @@ class ShockHash2 {
         RiceBitVector<AT> descriptors;
         DoubleEF<AT> ef;
         using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
-        Ribbon *ribbon = nullptr;
+        Ribbon ribbon;
 
     public:
         ShockHash2() {}
@@ -225,7 +225,7 @@ class ShockHash2 {
             const auto b = reader.readNext(golomb_param(m));
 
             // Begin: difference to RecSplit.
-            return cum_keys + shockhash2query(m, b, hash.second, ribbon->retrieve(hash.second));
+            return cum_keys + shockhash2query(m, b, hash.second, ribbon.retrieve(hash.second));
             // End: difference to RecSplit.
         }
 
@@ -242,14 +242,14 @@ class ShockHash2 {
         /** Returns an estimate of the size in bits of this structure. */
         size_t getBits() {
             return ef.bitCountCumKeys() + ef.bitCountPosition()
-                    + descriptors.getBits() + 8 * ribbon->size() + 8 * sizeof(ShockHash2);
+                    + descriptors.getBits() + 8 * ribbon.sizeBytes() + 8 * sizeof(ShockHash2);
         }
 
         void printBits() {
             std::cout<<"EF 1:   "<<(double)ef.bitCountCumKeys()/keys_count<<std::endl;
             std::cout<<"EF 2:   "<<(double)ef.bitCountPosition()/keys_count<<std::endl;
             std::cout<<"trees:  "<<(double)descriptors.getBits()/keys_count<<std::endl;
-            std::cout<<"ribbon: "<<(double)(8 * ribbon->size())/keys_count<<std::endl;
+            std::cout<<"ribbon: "<<(double)(8 * ribbon.sizeBytes())/keys_count<<std::endl;
         }
 
     private:
@@ -494,7 +494,7 @@ class ShockHash2 {
                     vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
             // Begin: difference to RecSplit.
-            ribbon = new Ribbon(ribbonInput);
+            ribbon = Ribbon(ribbonInput);
             // End: difference to RecSplit.
 
 #ifdef STATS

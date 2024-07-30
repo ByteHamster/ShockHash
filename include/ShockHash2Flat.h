@@ -52,7 +52,7 @@ class ShockHash2Flat {
         pasta::BitVector freePositionsBv;
         pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES> *freePositionsRankSelect = nullptr;
         using Ribbon = SimpleRibbon<1, (k > 24) ? 128 : 64>;
-        Ribbon *ribbon = nullptr;
+        Ribbon ribbon;
         size_t layers = 2;
     public:
         explicit ShockHash2Flat(const std::vector<std::string> &keys, size_t ignore, size_t ignore2)
@@ -160,7 +160,7 @@ class ShockHash2Flat {
                 setSeed(i, seed);
             }
             // Construct last bucket
-            ribbon = new Ribbon(ribbonInput);
+            ribbon = Ribbon(ribbonInput);
         }
 
         inline void setThreshold(size_t bucket, size_t value) {
@@ -225,7 +225,7 @@ class ShockHash2Flat {
             return 8 * sizeof(*this)
                     + fallbackPhf.getBits()
                     + (freePositionsBv.size() + 8 * freePositionsRankSelect->space_usage())
-                    + 8 * ribbon->size()
+                    + 8 * ribbon.sizeBytes()
                     + thresholdsAndSeeds.bit_size()
                     + 64 * seedsFallback.size();
         }
@@ -237,7 +237,7 @@ class ShockHash2Flat {
             std::cout << "Fano: " << 1.0f*(freePositionsBv.size() + 8 * freePositionsRankSelect->space_usage()) / N << std::endl;
             std::cout << "Base case seeds: " << 1.0f*SEED_BITS/k << std::endl;
             std::cout << "Base case seeds overflow: " << 1.0f*seedsFallback.size()*64/N << std::endl;
-            std::cout << "Ribbon: " << 8.0f*ribbon->size() / N << std::endl;
+            std::cout << "Ribbon: " << 8.0f*ribbon.sizeBytes() / N << std::endl;
         }
 
         size_t operator() (const std::string &key) {
@@ -256,7 +256,7 @@ class ShockHash2Flat {
             if (seed == SEED_FALLBACK_INDICATOR) {
                 seed = seedsFallback.at(bucket);
             }
-            size_t retrieved = ribbon->retrieve(hash);
+            size_t retrieved = ribbon.retrieve(hash);
             size_t baseCase = BaseCase::hash(seed, hash, retrieved);
             return bucket * k + baseCase;
         }
