@@ -120,7 +120,7 @@ class SIMDShockHash {
     RiceBitVector<AT> descriptors;
     DoubleEF<AT> ef;
     using Ribbon = SimpleRibbon<1, (_leaf > 24) ? 128 : 64>;
-    Ribbon *ribbon = nullptr;
+    Ribbon ribbon;
 
   public:
     SIMDShockHash() {}
@@ -724,7 +724,7 @@ class SIMDShockHash {
         ef = DoubleEF<AT>(vector<uint64_t>(bucket_size_acc.begin(), bucket_size_acc.end()), vector<uint64_t>(bucket_pos_acc.begin(), bucket_pos_acc.end()));
 
         // Begin: difference to SIMDRecSplit.
-        ribbon = new Ribbon(ribbonInput);
+        ribbon = Ribbon(ribbonInput);
         ribbonInput.clear();
         // End: difference to SIMDRecSplit.
 
@@ -821,7 +821,7 @@ public:
 
         // Begin: difference to SIMDRecSplit.
         shockhash::HashedKey key(hash.second);
-        size_t hashFunctionIndex = ribbon->retrieve(hash.second);
+        size_t hashFunctionIndex = ribbon.retrieve(hash.second);
         if (ROTATION_FITTING && m == LEAF_SIZE) {
             size_t r = b % LEAF_SIZE;
             size_t x = b / LEAF_SIZE + start_seed[NUM_START_SEEDS - 1];
@@ -854,14 +854,14 @@ public:
     /** Returns an estimate of the size in bits of this structure. */
     size_t getBits() {
         return ef.bitCountCumKeys() + ef.bitCountPosition()
-               + descriptors.getBits() + 8 * ribbon->size() + 8 * sizeof(SIMDShockHash);
+               + descriptors.getBits() + 8 * ribbon.sizeBytes() + 8 * sizeof(SIMDShockHash);
     }
 
     void printBits() {
         std::cout<<"EF 1:   "<<(double)ef.bitCountCumKeys()/keys_count<<std::endl;
         std::cout<<"EF 2:   "<<(double)ef.bitCountPosition()/keys_count<<std::endl;
         std::cout<<"trees:  "<<(double)descriptors.getBits()/keys_count<<std::endl;
-        std::cout<<"ribbon: "<<(double)(8 * ribbon->size())/keys_count<<std::endl;
+        std::cout<<"ribbon: "<<(double)(8 * ribbon.sizeBytes())/keys_count<<std::endl;
     }
 };
 
