@@ -502,7 +502,7 @@ class ShockHash2 {
             double ef_sizes = (double)ef.bitCountCumKeys() / keys_count;
             double ef_bits = (double)ef.bitCountPosition() / keys_count;
             double rice_desc = (double)builder.getBits() / keys_count;
-            double retrieval = 8.0 * (double)ribbon->size() / keys_count;
+            double retrieval = 8.0 * (double)ribbon.sizeBytes() / keys_count;
             printf("Elias-Fano cumul sizes:  %f bits/bucket\n", (double)ef.bitCountCumKeys() / nbuckets);
             printf("Elias-Fano cumul bits:   %f bits/bucket\n", (double)ef.bitCountPosition() / nbuckets);
             printf("Elias-Fano cumul sizes:  %f bits/key\n", ef_sizes);
