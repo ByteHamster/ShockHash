@@ -1,6 +1,14 @@
-cmake_minimum_required (VERSION 3.16)
+cmake_minimum_required (VERSION 3.21)
 cmake_policy(SET CMP0048 NEW)
-project(ShockHash LANGUAGES CXX)
+project(ShockHash
+    DESCRIPTION "Various basic data structures"
+    HOMEPAGE_URL "https://github.com/ByteHamster/ShockHash"
+    VERSION 1.0
+    LANGUAGES CXX)
+
+if(TARGET ShockHash)
+    return()
+endif()
 
 if((CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
         AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
@@ -65,7 +73,7 @@ if(SSE4_2_FOUND)
 endif()
 
 # ---------------------------- Benchmarks ----------------------------
-if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if(PROJECT_IS_TOP_LEVEL)
     add_library(BenchmarkUtils INTERFACE)
     target_include_directories(BenchmarkUtils INTERFACE benchmark)
     target_include_directories(BenchmarkUtils INTERFACE test)
