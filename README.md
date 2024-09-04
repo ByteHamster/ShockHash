@@ -1,11 +1,24 @@
 # ShockHash
 
-Small, heavily overloaded cuckoo hash tables inside the [RecSplit](https://github.com/vigna/sux/blob/master/sux/function/RecSplit.hpp) framework.
-Constructs very compact perfect hash functions significantly faster than previous approaches.
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+![Build status](https://github.com/ByteHamster/ShockHash/actions/workflows/build.yml/badge.svg)
 
-### Construction performance
+A minimal perfect hash function (MPHF) maps a set S of n keys to the first n integers without collisions.
+Perfect hash functions have applications in databases, bioinformatics, and as a building block of various space-efficient data structures.
 
-[<img src="https://raw.githubusercontent.com/ByteHamster/ShockHash/main/plots.png" alt="Plots preview" />](https://arxiv.org/abs/2310.14959)
+ShockHash (**s**mall, **h**eavily **o**verloaded **c**uc**k**oo **hash** tables) is an MPHF that achieves space very close to the lower bound,
+while still being fast to construct.
+In contrast to the simple brute-force approach that needs to try e^n = 2.72^n different hash function seeds,
+ShockHash significantly reduces the search space.
+Instead of sampling hash functions hoping for them to be minimal perfect, it samples random graphs,
+hoping for them to be a pseudoforest.
+In its most space-efficient variant, it can reduce the running time to just 1.16^n,
+while still being asymptotically space optimal.
+
+Still being an exponential time algorithm, we integrate ShockHash into several partitioning frameworks.
+Our implementation inside the [RecSplit](https://github.com/vigna/sux/blob/master/sux/function/RecSplit.hpp) framework achieves the best space efficiency.
+Using ShockHash inside our novel k-perfect hash function achieves fast queries
+while still being faster to construct and more space efficient than any previous approaches.
 
 ### Library Usage
 
@@ -36,6 +49,10 @@ We also give the base-case implementations without the RecSplit framework, which
 
 - Original [ShockHash](https://github.com/ByteHamster/ShockHash/blob/main/benchmark/bijections/ShockHash1.h).
 - [Bipartite ShockHash](https://github.com/ByteHamster/ShockHash/blob/main/include/ShockHash2-internal.h). The outer loop that is also given in the pseudocode of the paper is given in `BijectionsShockHash2::findSeed`.
+
+### Construction performance
+
+[![Plots preview](https://raw.githubusercontent.com/ByteHamster/ShockHash/main/plots.png)](https://arxiv.org/abs/2310.14959)
 
 ### Licensing
 ShockHash is licensed exactly like `libstdc++` (GPLv3 + GCC Runtime Library Exception), which essentially means you can use it everywhere, exactly like `libstdc++`.
