@@ -25,7 +25,7 @@
 #include "RiceBitVector.h"
 
 namespace shockhash {
-static const int MAX_LEAF_SIZE2 = 138;
+static const int MAX_LEAF_SIZE2 = 128;
 
 // Optimal Golomb-Rice parameters for leaves. See golombMemoTuner.cpp.
 // Note that uneven leaf sizes are less efficient in ShockHash2.
@@ -42,8 +42,7 @@ static constexpr uint8_t bij_memo2[MAX_LEAF_SIZE2 + 1] = {
         37, 39, 38, 40, 38, 40, 40, 41, 40, 42, // 90..99
         41, 43, 42, 44, 43, 45, 44, 45, 45, 47, // 100..109
         46, 47, 46, 48, 47, 49, 48, 50, 49, 51, // 110..119
-        50, 52, 51, 53, 52, 54, 53, 54, 54, 55, // 120..129
-        54, 56, 55, 58, 56, 58, 56, 59, 58, // 130..138
+        50, 52, 51, 53, 52, 54, 53, 54, 54 // 120..128
 };
 
 template <size_t LEAF_SIZE> class SplittingStrategy2 {
