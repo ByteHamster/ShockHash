@@ -13,6 +13,7 @@
 #include <vector>
 #include <fstream>
 #include <thread>
+#include <span>
 #include <condition_variable>
 #include <sux/util/Vector.hpp>
 #include <sux/function/DoubleEF.hpp>

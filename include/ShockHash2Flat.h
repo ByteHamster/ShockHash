@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <span>
 #include <SimpleRibbon.h>
 #include <EliasFano.h>
 #include <MurmurHash64.h>
