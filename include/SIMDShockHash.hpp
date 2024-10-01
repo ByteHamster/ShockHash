@@ -18,6 +18,7 @@
 #include <vector>
 #include <fstream>
 #include <utility>
+#include <span>
 
 #ifndef SIMD
 #error Need to compile SIMDShockHash with -DSIMD
