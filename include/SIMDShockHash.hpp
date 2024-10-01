@@ -134,7 +134,7 @@ class SIMDShockHash {
      * 100 to 2000, with smaller buckets giving slightly larger but faster
      * functions.
      */
-    SIMDShockHash(const vector<string> &keys, const size_t bucket_size, size_t num_threads = 1) {
+    SIMDShockHash(const span<string> keys, const size_t bucket_size, size_t num_threads = 1) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
         hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
@@ -172,7 +172,7 @@ class SIMDShockHash {
      * 100 to 2000, with smaller buckets giving slightly larger but faster
      * functions.
      */
-    SIMDShockHash(vector<hash128_t> &keys, const size_t bucket_size, size_t num_threads = 1) {
+    SIMDShockHash(span<hash128_t> keys, const size_t bucket_size, size_t num_threads = 1) {
         this->bucket_size = bucket_size;
         this->keys_count = keys.size();
         hash_gen(&keys[0], num_threads);

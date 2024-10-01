@@ -55,13 +55,13 @@ class ShockHash2Flat {
         Ribbon ribbon;
         size_t layers = 2;
     public:
-        explicit ShockHash2Flat(const std::vector<std::string> &keys, size_t ignore, size_t ignore2)
+        explicit ShockHash2Flat(const std::span<std::string> keys, size_t ignore, size_t ignore2)
             : ShockHash2Flat(keys) {
             (void) ignore;
             (void) ignore2;
         }
 
-        explicit ShockHash2Flat(const std::vector<std::string> &keys) {
+        explicit ShockHash2Flat(const std::span<std::string> keys) {
             N = keys.size();
             nbuckets = N / k;
             size_t keysInEndBucket = N - nbuckets * k;
@@ -171,7 +171,7 @@ class ShockHash2Flat {
             thresholdsAndSeeds.set_int(bucket * (THRESHOLD_BITS + SEED_BITS) + THRESHOLD_BITS, value, SEED_BITS);
         }
 
-        inline std::pair<size_t, size_t> getThresholdAndSeed(size_t bucket) {
+        inline std::pair<size_t, size_t> getThresholdAndSeed(size_t bucket) const {
             uint64_t thresholdAndSeed = thresholdsAndSeeds.get_int(
                     bucket * (THRESHOLD_BITS + SEED_BITS), SEED_BITS + THRESHOLD_BITS);
             size_t seed = thresholdAndSeed >> THRESHOLD_BITS;
@@ -221,7 +221,7 @@ class ShockHash2Flat {
         }
 
         /** Estimate for the space usage of this structure, in bits */
-        [[nodiscard]] size_t getBits() {
+        [[nodiscard]] size_t getBits() const {
             return 8 * sizeof(*this)
                     + fallbackPhf.getBits()
                     + (freePositionsBv.size() + 8 * freePositionsRankSelect->space_usage())
@@ -230,7 +230,7 @@ class ShockHash2Flat {
                     + 64 * seedsFallback.size();
         }
 
-        void printBits() {
+        void printBits() const {
             std::cout << "Thresholds: " << 1.0f*THRESHOLD_BITS/k << std::endl;
             std::cout << "Fallback PHF keys: " << freePositionsBv.size() - N/k << std::endl;
             std::cout << "PHF: " << 1.0f*fallbackPhf.getBits() / N << std::endl;
@@ -240,15 +240,15 @@ class ShockHash2Flat {
             std::cout << "Ribbon: " << 8.0f*ribbon.sizeBytes() / N << std::endl;
         }
 
-        size_t operator() (const std::string &key) {
+        size_t operator() (const std::string &key) const {
             return operator()(::util::MurmurHash64(key));
         }
 
-        size_t operator()(const hash128_t &hash) {
+        size_t operator()(const hash128_t &hash) const {
             return operator()(hash.second);
         }
 
-        __attribute_noinline__ size_t operator()(uint64_t hash) {
+        inline size_t operator()(uint64_t hash) const {
             auto [bucket, seed] = evaluateKPerfect(hash);
             if (bucket >= nbuckets) {
                 return bucket; // N that are not multiples of k
@@ -262,7 +262,7 @@ class ShockHash2Flat {
         }
 
         /** Returns bucket and seed */
-        inline std::pair<size_t, size_t> evaluateKPerfect(uint64_t mhc) {
+        inline std::pair<size_t, size_t> evaluateKPerfect(uint64_t mhc) const {
             for (size_t layer = 0; layer < layers; layer++) {
                 if (layer != 0) {
                     mhc = ::util::remix(mhc);

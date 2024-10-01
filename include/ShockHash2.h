@@ -137,7 +137,7 @@ class ShockHash2 {
         ShockHash2() {}
 
 
-        ShockHash2(const vector<string> &keys, const size_t bucket_size, size_t num_threads = 1) {
+        ShockHash2(const span<string> keys, const size_t bucket_size, size_t num_threads = 1) {
             this->keys_count = keys.size();
             hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
             if (num_threads == 1) {
@@ -164,7 +164,7 @@ class ShockHash2 {
             free(h);
         }
 
-        ShockHash2(vector<hash128_t> &keys, const size_t bucket_size, size_t num_threads = 1) {
+        ShockHash2(span<hash128_t> keys, const size_t bucket_size, size_t num_threads = 1) {
             this->keys_count = keys.size();
             hash_gen(&keys[0], num_threads, bucket_size);
         }
@@ -175,7 +175,7 @@ class ShockHash2 {
          * @param hash a 128-bit hash.
          * @return the associated value.
          */
-        size_t operator()(const hash128_t &hash) {
+        size_t operator()(const hash128_t &hash) const {
             const size_t bucket = hash128_to_bucket(hash);
             uint64_t cum_keys, cum_keys_next, bit_pos;
             ef.get(bucket, cum_keys, cum_keys_next, bit_pos);
@@ -234,18 +234,18 @@ class ShockHash2 {
          * @param key a key.
          * @return the associated value.
          */
-        size_t operator()(const string &key) { return operator()(first_hash(key.c_str(), key.size())); }
+        size_t operator()(const string &key) const { return operator()(first_hash(key.c_str(), key.size())); }
 
         /** Returns the number of keys used to build this RecSplit instance. */
-        inline size_t size() { return this->keys_count; }
+        inline size_t size() const { return this->keys_count; }
 
         /** Returns an estimate of the size in bits of this structure. */
-        size_t getBits() {
+        size_t getBits() const {
             return ef.bitCountCumKeys() + ef.bitCountPosition()
                     + descriptors.getBits() + 8 * ribbon.sizeBytes() + 8 * sizeof(ShockHash2);
         }
 
-        void printBits() {
+        void printBits() const {
             std::cout<<"EF 1:   "<<(double)ef.bitCountCumKeys()/keys_count<<std::endl;
             std::cout<<"EF 2:   "<<(double)ef.bitCountPosition()/keys_count<<std::endl;
             std::cout<<"trees:  "<<(double)descriptors.getBits()/keys_count<<std::endl;

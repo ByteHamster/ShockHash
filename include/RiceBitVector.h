@@ -151,10 +151,10 @@ template <sux::util::AllocType AT = sux::util::AllocType::MALLOC> class RiceBitV
                 uint64_t curr_window_unary = 0;
                 uint64_t *curr_ptr_unary;
                 int valid_lower_bits_unary = 0;
-                sux::util::Vector<uint64_t, AT> &data;
+                const sux::util::Vector<uint64_t, AT> &data;
 
             public:
-                Reader(sux::util::Vector<uint64_t, AT> &data) : data(data) {}
+                Reader(const sux::util::Vector<uint64_t, AT> &data) : data(data) {}
 
                 uint64_t readNext(const int log2golomb) {
                     uint64_t result = 0;
@@ -213,7 +213,7 @@ template <sux::util::AllocType AT = sux::util::AllocType::MALLOC> class RiceBitV
                 }
         };
 
-        Reader reader() { return Reader(data); }
+        Reader reader() const { return Reader(data); }
 };
 
 } // namespace shockhash
