@@ -55,13 +55,13 @@ class ShockHash2Flat {
         Ribbon ribbon;
         size_t layers = 2;
     public:
-        explicit ShockHash2Flat(const std::span<std::string> keys, size_t ignore, size_t ignore2)
+        explicit ShockHash2Flat(std::span<const std::string> keys, size_t ignore, size_t ignore2)
             : ShockHash2Flat(keys) {
             (void) ignore;
             (void) ignore2;
         }
 
-        explicit ShockHash2Flat(const std::span<std::string> keys) {
+        explicit ShockHash2Flat(std::span<const std::string> keys) {
             N = keys.size();
             nbuckets = N / k;
             size_t keysInEndBucket = N - nbuckets * k;

@@ -137,7 +137,7 @@ class ShockHash2 {
         ShockHash2() {}
 
 
-        ShockHash2(const span<string> keys, const size_t bucket_size, size_t num_threads = 1) {
+        ShockHash2(span<const string> keys, const size_t bucket_size, size_t num_threads = 1) {
             this->keys_count = keys.size();
             hash128_t *h = (hash128_t *)malloc(this->keys_count * sizeof(hash128_t));
             if (num_threads == 1) {
