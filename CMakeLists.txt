@@ -90,7 +90,7 @@ if(PROJECT_IS_TOP_LEVEL)
     target_link_libraries(BenchmarkUtils INTERFACE tlx ByteHamster::Util)
 
     # Warnings if this is the main project
-    target_compile_options(ShockHash INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror -frecord-gcc-switches>)
+    target_compile_options(ShockHash INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror -Wno-error=stringop-overflow -frecord-gcc-switches>)
 
     add_executable(Benchmark benchmark/benchmark_construction.cpp)
     target_link_libraries(Benchmark PUBLIC BenchmarkUtils ShockHash)
