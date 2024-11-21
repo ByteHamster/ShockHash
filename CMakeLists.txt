@@ -1,5 +1,4 @@
-cmake_minimum_required (VERSION 3.21)
-cmake_policy(SET CMP0048 NEW)
+cmake_minimum_required (VERSION 3.25)
 project(ShockHash
     DESCRIPTION "Various basic data structures"
     HOMEPAGE_URL "https://github.com/ByteHamster/ShockHash"
@@ -10,8 +9,11 @@ if(TARGET ShockHash)
     return()
 endif()
 
-if((CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-        AND CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+if (NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE "Release")
+endif ()
+
+if((CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo") AND PROJECT_IS_TOP_LEVEL)
     add_compile_options(-march=native)
 endif()
 
@@ -28,12 +30,20 @@ endif()
 
 if(NOT TARGET tlx)
     set(TLX_INSTALL_INCLUDE_DIR tlx CACHE PATH "Workaround for TLX breaking the first cmake call")
-    add_subdirectory(extlib/tlx)
+    add_subdirectory(extlib/tlx SYSTEM EXCLUDE_FROM_ALL)
+endif()
+
+if(NOT TARGET sdsl)
+    add_subdirectory(extlib/sdsl-lite/external SYSTEM EXCLUDE_FROM_ALL)
+    add_subdirectory(extlib/sdsl-lite/include SYSTEM EXCLUDE_FROM_ALL)
+    add_subdirectory(extlib/sdsl-lite/lib SYSTEM EXCLUDE_FROM_ALL)
+    target_compile_options(sdsl PRIVATE -w)
+    target_include_directories(sdsl SYSTEM INTERFACE extlib/sdsl-lite/include)
 endif()
 
 if(NOT TARGET simpleRibbon)
     set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
-    add_subdirectory(extlib/simpleRibbon)
+    add_subdirectory(extlib/simpleRibbon SYSTEM EXCLUDE_FROM_ALL)
     find_package(TBB)
     target_compile_options(ips2ra INTERFACE -D_REENTRANT)
     target_link_libraries(ips2ra INTERFACE pthread atomic TBB::tbb)
@@ -48,7 +58,7 @@ if(NOT TARGET Ips2raShockHashSorter)
 endif()
 
 if(NOT TARGET ByteHamsterUtil)
-    add_subdirectory(extlib/util)
+    add_subdirectory(extlib/util EXCLUDE_FROM_ALL)
 endif()
 
 # ---------------------------- Library Setup ----------------------------
@@ -62,7 +72,7 @@ target_compile_options(ShockHash2Precompiled PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-
 add_library(ShockHash INTERFACE)
 target_include_directories(ShockHash INTERFACE include)
 target_compile_features(ShockHash INTERFACE cxx_std_20)
-target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter ByteHamsterUtil ShockHash2Precompiled)
+target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter ByteHamsterUtil ShockHash2Precompiled sdsl)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/extlib/cmake-findsse/FindSSE.cmake)
 FindSSE()
@@ -77,10 +87,10 @@ if(PROJECT_IS_TOP_LEVEL)
     add_library(BenchmarkUtils INTERFACE)
     target_include_directories(BenchmarkUtils INTERFACE benchmark)
     target_include_directories(BenchmarkUtils INTERFACE test)
-    target_link_libraries(BenchmarkUtils INTERFACE tlx ByteHamsterUtil)
+    target_link_libraries(BenchmarkUtils INTERFACE tlx ByteHamster::Util)
 
     # Warnings if this is the main project
-    target_compile_options(ShockHash INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -frecord-gcc-switches>)
+    target_compile_options(ShockHash INTERFACE $<$<COMPILE_LANGUAGE:CXX>:-Wall -Wextra -Wpedantic -Werror -frecord-gcc-switches>)
 
     add_executable(Benchmark benchmark/benchmark_construction.cpp)
     target_link_libraries(Benchmark PUBLIC BenchmarkUtils ShockHash)

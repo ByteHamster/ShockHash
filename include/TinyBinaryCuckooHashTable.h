@@ -2,8 +2,8 @@
 #include <vector>
 #include <cassert>
 #include <queue>
-#include "Function.h"
-#include "MurmurHash64.h"
+#include <bytehamster/util/Function.h>
+#include <bytehamster/util/MurmurHash64.h>
 #include <cstring>
 #ifdef SIMD
 #include "SimdUtils.h"
@@ -21,13 +21,13 @@ struct HashedKey {
     }
 
     explicit HashedKey(const std::string &element, uint32_t seed = 0) {
-        uint64_t stringHash = util::MurmurHash64(element.data(), element.length());
+        uint64_t stringHash = bytehamster::util::MurmurHash64(element.data(), element.length());
         uint64_t modified = stringHash + seed;
-        mhc = util::MurmurHash64(&modified, sizeof(uint64_t));
+        mhc = bytehamster::util::MurmurHash64(&modified, sizeof(uint64_t));
     }
 
     [[nodiscard]] inline uint64_t hash(int hashFunctionIndex, size_t range) const {
-        return util::fastrange64(util::remix(mhc + hashFunctionIndex), range);
+        return bytehamster::util::fastrange64(bytehamster::util::remix(mhc + hashFunctionIndex), range);
     }
 };
 
@@ -129,21 +129,21 @@ class TinyBinaryCuckooHashTable {
 
         template <size_t range>
         static inline CandidateCells getCandidateCells(const HashedKey key, size_t seed) {
-            uint64_t remixed = util::remix(key.mhc + seed);
-            const uint32_t hash1 = util::fastrange32<range / 2>(remixed);
-            const uint32_t hash2 = util::fastrange32<(range + 1) / 2>(remixed >> 32) + range / 2;
+            uint64_t remixed = bytehamster::util::remix(key.mhc + seed);
+            const uint32_t hash1 = bytehamster::util::fastrange32<range / 2>(remixed);
+            const uint32_t hash2 = bytehamster::util::fastrange32<(range + 1) / 2>(remixed >> 32) + range / 2;
             return {hash1, hash2};
         }
 
         static inline CandidateCells getCandidateCells(const HashedKey key, size_t seed, size_t range) {
-            uint64_t remixed = util::remix(key.mhc + seed);
-            const uint32_t hash1 = util::fastrange32(remixed, range / 2);
-            const uint32_t hash2 = util::fastrange32(remixed >> 32, (range + 1) / 2) + range / 2;
+            uint64_t remixed = bytehamster::util::remix(key.mhc + seed);
+            const uint32_t hash1 = bytehamster::util::fastrange32(remixed, range / 2);
+            const uint32_t hash2 = bytehamster::util::fastrange32(remixed >> 32, (range + 1) / 2) + range / 2;
             /* // Performance is slightly worse, but produces slightly better hash distribution (0.005 bpk better)
-            const uint32_t hash1 = util::fastrange32(remixed, range);
-            uint32_t hash2 = util::fastrange32(remixed >> 32, range);
+            const uint32_t hash1 = bytehamster::util::fastrange32(remixed, range);
+            uint32_t hash2 = bytehamster::util::fastrange32(remixed >> 32, range);
             if (hash1 == hash2) {
-                hash2 = util::fastrange32((remixed >> 32) ^ (remixed & 0xffffffff), range);
+                hash2 = bytehamster::util::fastrange32((remixed >> 32) ^ (remixed & 0xffffffff), range);
             }*/
             return {hash1, hash2};
         }

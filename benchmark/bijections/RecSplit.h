@@ -4,8 +4,8 @@
 #include <vector>
 #include <cmath>
 #include <sux/support/common.hpp>
-#include <MurmurHash64.h>
-#include <Function.h>
+#include <bytehamster/util/MurmurHash64.h>
+#include <bytehamster/util/Function.h>
 
 static const int MAX_LEAF_SIZE = 24;
 #define DO_NOT_OPTIMIZE(value) asm volatile ("" : : "r,m"(value) : "memory")
@@ -32,7 +32,7 @@ class BijectionsRecSplit {
                 for (;;) {
                     mask = 0;
                     for (size_t i = 0; i < leafSize; i++) {
-                        mask |= uint32_t(1) << util::fastrange16(util::remix(keys[i] + x), leafSize);
+                        mask |= uint32_t(1) << bytehamster::util::fastrange16(bytehamster::util::remix(keys[i] + x), leafSize);
                     }
                     if (mask == found) {
                         return x;
@@ -45,11 +45,11 @@ class BijectionsRecSplit {
                     mask = 0;
                     size_t i;
                     for (i = 0; i < midstop; i++) {
-                        mask |= uint32_t(1) << util::fastrange16(util::remix(keys[i] + x), leafSize);
+                        mask |= uint32_t(1) << bytehamster::util::fastrange16(bytehamster::util::remix(keys[i] + x), leafSize);
                     }
                     if (sux::nu(mask) == midstop) {
                         for (; i < leafSize; i++) {
-                            mask |= uint32_t(1) << util::fastrange16(util::remix(keys[i] + x), leafSize);
+                            mask |= uint32_t(1) << bytehamster::util::fastrange16(bytehamster::util::remix(keys[i] + x), leafSize);
                         }
                         if (mask == found) {
                             return x;

@@ -3,7 +3,7 @@
 #include <cmath>
 #include "../include/TinyBinaryCuckooHashTable.h"
 #include "../include/UnionFind.h"
-#include <XorShift64.h>
+#include <bytehamster/util/XorShift64.h>
 #include <chrono>
 #include <set>
 #include <unordered_set>
@@ -37,7 +37,7 @@ void testRotationFitting(size_t l) {
             }
             bool canBeRotated = false;
             for (size_t r = 0; r < l; r++) {
-                if ((taken1 | rotate(l, taken2, r)) == (1<<l) - 1) {
+                if ((taken1 | rotate(l, taken2, r)) == (1ul << l) - 1) {
                     canBeRotated = true;
                     break;
                 }
@@ -163,7 +163,7 @@ void testShockHashRot(size_t l) {
         std::vector<uint64_t> keys;
         auto time = std::chrono::system_clock::now();
         long seed = std::chrono::duration_cast<std::chrono::milliseconds>(time.time_since_epoch()).count() * (iteration + 1);
-        util::XorShift64 prng(seed);
+        bytehamster::util::XorShift64 prng(seed);
         shockhash::TinyBinaryCuckooHashTable table(l);
         for (size_t i = 0; i < l; i++) {
             keys.push_back(prng());
@@ -236,7 +236,7 @@ void testBipShockHash(size_t l) {
     for (size_t iteration = 0; iteration < numIterations; iteration++) {
         std::vector<uint64_t> keys;
         for (size_t i = 0; i < l; i++) {
-            keys.emplace_back(util::MurmurHash64(std::to_string(i) + " " + std::to_string(iteration)));
+            keys.emplace_back(bytehamster::util::MurmurHash64(std::to_string(i) + " " + std::to_string(iteration)));
         }
         std::vector<std::pair<uint64_t, uint8_t>> ribbonInput;
         // WARNING: To use this, switch to BasicSeedCandidateFinder in ShockHash2-precompiled.h!

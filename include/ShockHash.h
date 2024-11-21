@@ -480,7 +480,7 @@ class ShockHash {
                     if (m - split > 1) recSplit(bucket, temp, start + split, end, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                 } else if (m > lower_aggr) { // 2nd aggregation level
                     const size_t fanout = uint16_t(m + lower_aggr - 1) / lower_aggr;
-                    size_t count[fanout]; // Note that we never read count[fanout-1]
+                    size_t count[MAX_FANOUT]; // Note that we never read count[fanout-1]
                     for (;;) {
                         memset(count, 0, sizeof count - sizeof *count);
                         for (size_t i = start; i < end; i++) {
@@ -514,7 +514,7 @@ class ShockHash {
                     if (m - i > 1) recSplit(bucket, temp, start + i, end, builder, unary, level + 1, tinyBinaryCuckooHashTable, ribbonInput);
                 } else { // First aggregation level, m <= lower_aggr
                     const size_t fanout = uint16_t(m + _leaf - 1) / _leaf;
-                    size_t count[fanout]; // Note that we never read count[fanout-1]
+                    size_t count[MAX_FANOUT]; // Note that we never read count[fanout-1]
                     for (;;) {
                         memset(count, 0, sizeof count - sizeof *count);
                         for (size_t i = start; i < end; i++) {
@@ -636,7 +636,7 @@ class ShockHash {
             } else {
                 std::vector<std::vector<std::pair<uint64_t, uint8_t>>> ribbonInputs;
                 ribbonInputs.resize(num_threads);
-                for (int tid = 0; tid < num_threads; ++tid) {
+                for (size_t tid = 0; tid < num_threads; ++tid) {
                     ribbonInputs.at(tid).reserve(keys_count / num_threads);
                     threads.emplace_back([&, tid] {
                         compute_thread(tid, num_threads, mtx, condition,
@@ -644,7 +644,7 @@ class ShockHash {
                                        next_thread_to_append_builder, builder, ribbonInputs.at(tid));
                     });
                 }
-                for (int tid = 0; tid < num_threads; ++tid) {
+                for (size_t tid = 0; tid < num_threads; ++tid) {
                     threads.at(tid).join();
                     ribbonInput.insert(ribbonInput.end(), ribbonInputs.at(tid).begin(), ribbonInputs.at(tid).end());
                 }

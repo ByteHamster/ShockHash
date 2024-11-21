@@ -707,7 +707,7 @@ class SIMDShockHash {
         } else {
             std::vector<std::vector<std::pair<uint64_t, uint8_t>>> ribbonInputs;
             ribbonInputs.resize(num_threads);
-            for (int tid = 0; tid < num_threads; ++tid) {
+            for (size_t tid = 0; tid < num_threads; ++tid) {
                 ribbonInputs.at(tid).reserve(keys_count / num_threads);
                 threads.emplace_back([&, tid] {
                     compute_thread(tid, num_threads, mtx, condition,
@@ -715,7 +715,7 @@ class SIMDShockHash {
                                    next_thread_to_append_builder, builder, ribbonInputs.at(tid));
                 });
             }
-            for (int tid = 0; tid < num_threads; ++tid) {
+            for (size_t tid = 0; tid < num_threads; ++tid) {
                 threads.at(tid).join();
                 ribbonInput.insert(ribbonInput.end(), ribbonInputs.at(tid).begin(), ribbonInputs.at(tid).end());
             }

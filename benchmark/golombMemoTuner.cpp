@@ -1,6 +1,6 @@
 #include <vector>
 #include <iostream>
-#include "XorShift64.h"
+#include <bytehamster/util/XorShift64.h>
 #include "ShockHash2-internal.h"
 
 template <template<size_t> class T, size_t leafSize>
@@ -17,7 +17,7 @@ void dispatchLeafSize() {
     }
 
     std::vector<uint64_t> leaf(leafSize);
-    util::XorShift64 prng;
+    bytehamster::util::XorShift64 prng;
     std::vector<size_t> seeds;
     size_t iterations = 10;
     if (leafSize < 50) {

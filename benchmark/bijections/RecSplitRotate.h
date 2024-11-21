@@ -4,8 +4,8 @@
 #include <vector>
 #include <cmath>
 #include <sux/support/common.hpp>
-#include <MurmurHash64.h>
-#include <Function.h>
+#include <bytehamster/util/MurmurHash64.h>
+#include <bytehamster/util/Function.h>
 
 /**
  * Alternative method of finding bijections that rotates two halves.
@@ -56,7 +56,7 @@ class BijectionsRotate {
             size_t itemsLeftCount = 0;
             size_t itemsRightCount = 0;
             for (int i = 0; i < leafSize; i++) {
-                bool isLeft = (util::remix(keys[i] - 1) % 2) == 0;
+                bool isLeft = (bytehamster::util::remix(keys[i] - 1) % 2) == 0;
                 if (isLeft) {
                     itemsLeft[itemsLeftCount] = keys[i];
                     itemsLeftCount++;
@@ -71,13 +71,13 @@ class BijectionsRotate {
                 uint32_t maskLeft = 0;
                 uint32_t maskRight = 0;
                 for (size_t i = 0; i < itemsLeftCount; i++) {
-                    maskLeft |= uint32_t(1) << util::fastrange16(util::remix(itemsLeft[i] + x), leafSize);
+                    maskLeft |= uint32_t(1) << bytehamster::util::fastrange16(bytehamster::util::remix(itemsLeft[i] + x), leafSize);
                 }
                 if ((size_t) sux::nu(maskLeft) != itemsLeftCount) {
                     continue; // Collisions in left part
                 }
                 for (size_t i1 = 0; i1 < itemsRightCount; i1++) {
-                    maskRight |= uint32_t(1) << util::fastrange16(util::remix(itemsRight[i1] + x), leafSize);
+                    maskRight |= uint32_t(1) << bytehamster::util::fastrange16(bytehamster::util::remix(itemsRight[i1] + x), leafSize);
                 }
                 if ((size_t) sux::nu(maskRight) != itemsRightCount) {
                     continue; // Collisions in right part

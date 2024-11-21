@@ -1,9 +1,10 @@
 #pragma once
 #include <vector>
 #include <span>
+#include <map>
 #include <SimpleRibbon.h>
-#include <EliasFano.h>
-#include <MurmurHash64.h>
+#include <bytehamster/util/EliasFano.h>
+#include <bytehamster/util/MurmurHash64.h>
 #include <tlx/math/integer_log2.hpp>
 #include <ShockHash2-internal.h>
 #include <ShockHash2.h>
@@ -71,8 +72,8 @@ class ShockHash2Flat {
             std::vector<KeyInfo> hashes;
             hashes.reserve(keys.size());
             for (const std::string &key : keys) {
-                uint64_t mhc = ::util::MurmurHash64(key);
-                uint32_t bucket = ::util::fastrange32(mhc & 0xffffffff, bucketsThisLayer);
+                uint64_t mhc = ::bytehamster::util::MurmurHash64(key);
+                uint32_t bucket = ::bytehamster::util::fastrange32(mhc & 0xffffffff, bucketsThisLayer);
                 uint32_t threshold = mhc >> 32;
                 hashes.emplace_back(mhc, bucket, threshold);
             }
@@ -90,8 +91,8 @@ class ShockHash2Flat {
                     }
                     // Rehash
                     for (auto & hash : hashes) {
-                        hash.mhc = ::util::remix(hash.mhc);
-                        hash.bucket = ::util::fastrange32(hash.mhc & 0xffffffff, bucketsThisLayer);
+                        hash.mhc = ::bytehamster::util::remix(hash.mhc);
+                        hash.bucket = ::bytehamster::util::fastrange32(hash.mhc & 0xffffffff, bucketsThisLayer);
                         hash.threshold = hash.mhc >> 32;
                     }
                 }
@@ -242,7 +243,7 @@ class ShockHash2Flat {
         }
 
         size_t operator() (const std::string &key) const {
-            return operator()(::util::MurmurHash64(key));
+            return operator()(::bytehamster::util::MurmurHash64(key));
         }
 
         size_t operator()(const hash128_t &hash) const {
@@ -266,11 +267,11 @@ class ShockHash2Flat {
         inline std::pair<size_t, size_t> evaluateKPerfect(uint64_t mhc) const {
             for (size_t layer = 0; layer < layers; layer++) {
                 if (layer != 0) {
-                    mhc = ::util::remix(mhc);
+                    mhc = ::bytehamster::util::remix(mhc);
                 }
                 size_t base = layerBases.at(layer);
                 size_t layerSize = layerBases.at(layer + 1) - base;
-                uint32_t bucket = ::util::fastrange32(mhc & 0xffffffff, layerSize);
+                uint32_t bucket = ::bytehamster::util::fastrange32(mhc & 0xffffffff, layerSize);
                 uint32_t threshold = mhc >> 32;
                 auto [storedThreshold, storedSeed] = getThresholdAndSeed(base + bucket);
                 if (threshold <= THRESHOLD_MAPPING[storedThreshold]) {

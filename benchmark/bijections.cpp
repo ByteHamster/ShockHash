@@ -1,7 +1,7 @@
 #include <vector>
 #include <chrono>
 #include <iostream>
-#include "XorShift64.h"
+#include <bytehamster/util/XorShift64.h>
 
 #include "bijections/RecSplit.h"
 #include "bijections/RecSplitRotate.h"
@@ -18,7 +18,7 @@ void testSingle(size_t iterations) {
               << std::flush;
     T t;
     std::vector<uint64_t> leaf(leafSize);
-    util::XorShift64 prng;
+    bytehamster::util::XorShift64 prng;
     double spaceSum = 0;
     double seedSum = 0;
     std::chrono::steady_clock::time_point begin = std::chrono::steady_clock::now();
