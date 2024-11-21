@@ -8,7 +8,7 @@ jobs:
   build:
     strategy:
       matrix:
-        version: [10, 11, 12, 13]
+        version: [11, 12, 13]
     name: Build (GCC ${{ matrix.version }})
     runs-on: ubuntu-24.04
     steps:
