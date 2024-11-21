@@ -22,7 +22,8 @@ while still being faster to construct and more space efficient than any previous
 
 ### Library Usage
 
-Clone (with submodules) this repo and add it to your `CMakeLists.txt`:
+Clone this repo and add the following to your `CMakeLists.txt`.
+Note that the repo has submodules, so either use `git clone --recursive` or `git submodule update --init --recursive`.
 
 ```cmake
 add_subdirectory(path/to/ShockHash)
@@ -61,21 +62,26 @@ You can find details in the [COPYING](/COPYING) and [COPYING.RUNTIME](/COPYING.R
 If you use [ShockHash](https://arxiv.org/abs/2308.09561) or [bipartite ShockHash](https://arxiv.org/abs/2310.14959) in an academic context or publication, please cite our papers:
 
 ```
-@misc{lehmann2023shockhash,
-      title={ShockHash: Towards Optimal-Space Minimal Perfect Hashing Beyond Brute-Force},
-      author={Hans-Peter Lehmann and Peter Sanders and Stefan Walzer},
-      year={2023},
-      eprint={2308.09561},
-      archivePrefix={arXiv},
-      primaryClass={cs.DS}
+@inproceedings{lehmann2023shockhash,
+  author = {Hans-Peter Lehmann and
+    Peter Sanders and
+    Stefan Walzer},
+  title = {{ShockHash}: Towards Optimal-Space Minimal Perfect Hashing Beyond Brute-Force},
+  booktitle = {{ALENEX}},
+  pages = {194--206},
+  publisher = {{SIAM}},
+  year = {2024},
+  doi = {10.1137/1.9781611977929.15}
 }
 
-@misc{lehmann2023bipartite,
-      title={Bipartite ShockHash: Pruning ShockHash Search for Efficient Perfect Hashing},
-      author={Hans-Peter Lehmann and Peter Sanders and Stefan Walzer},
-      year={2023},
-      eprint={2310.14959},
-      archivePrefix={arXiv},
-      primaryClass={cs.DS}
+@article{lehmann2023towardsArxiv,
+  author = {Hans-Peter Lehmann and
+    Peter Sanders and
+    Stefan Walzer},
+  title = {{ShockHash}: Towards Optimal-Space Minimal Perfect Hashing Beyond Brute-Force},
+  journal = {CoRR},
+  volume = {abs/2308.09561},
+  year = {2023},
+  doi = {10.48550/ARXIV.2308.09561}
 }
 ```
