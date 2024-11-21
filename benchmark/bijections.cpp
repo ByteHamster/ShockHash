@@ -7,7 +7,7 @@
 #include "bijections/RecSplitRotate.h"
 #include "bijections/ShockHash1.h"
 #include "bijections/ShockHash1Rotate.h"
-#include "ShockHash2-internal.h"
+#include "shockhash/ShockHash2-internal.h"
 
 template<size_t leafSize, class T>
 void testSingle(size_t iterations) {

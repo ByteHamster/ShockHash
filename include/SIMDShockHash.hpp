@@ -5,11 +5,9 @@
  * For tiny space usages (~1.6 bit/object), ShockHash is faster than RecSplit.
  */
 
-#include <ShockHash.h>
 #include <sux/util/Vector.hpp>
 #include <sux/function/DoubleEF.hpp>
 #include <sux/function/RiceBitVector.hpp>
-#include "SimdUtils.h"
 #include <array>
 #include <cassert>
 #include <chrono>
@@ -19,6 +17,8 @@
 #include <fstream>
 #include <utility>
 #include <span>
+#include "ShockHash.h"
+#include "shockhash/SimdUtils.h"
 
 #ifndef SIMD
 #error Need to compile SIMDShockHash with -DSIMD

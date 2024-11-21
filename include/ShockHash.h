@@ -19,9 +19,9 @@
 #include <sux/function/RiceBitVector.hpp>
 #include <sux/function/RecSplit.hpp>
 #include <SimpleRibbon.h>
-#include <Sorter.hpp>
-#include "TinyBinaryCuckooHashTable.h"
-#include "RiceBitVector.h"
+#include "shockhash/Sorter.hpp"
+#include "shockhash/TinyBinaryCuckooHashTable.h"
+#include "shockhash/RiceBitVector.h"
 
 namespace shockhash {
 using namespace sux;

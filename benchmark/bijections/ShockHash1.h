@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cmath>
-#include <TinyBinaryCuckooHashTable.h>
+#include "shockhash/TinyBinaryCuckooHashTable.h"
 
 /**
  * ShockHash base case

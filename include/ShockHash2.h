@@ -20,10 +20,10 @@
 #include <sux/function/RiceBitVector.hpp>
 #include <sux/function/RecSplit.hpp>
 #include <SimpleRibbon.h>
-#include <Sorter.hpp>
+#include "shockhash/Sorter.hpp"
 #include "ShockHash.h"
-#include "ShockHash2-precompiled.h"
-#include "RiceBitVector.h"
+#include "shockhash/ShockHash2-precompiled.h"
+#include "shockhash/RiceBitVector.h"
 
 namespace shockhash {
 static const int MAX_LEAF_SIZE2 = 128;

@@ -7,8 +7,8 @@
 #include <unordered_map>
 #include <iostream>
 #include <algorithm>
-#include <TinyBinaryCuckooHashTable.h>
-#include <UnionFind.h>
+#include "TinyBinaryCuckooHashTable.h"
+#include "UnionFind.h"
 #include <experimental/simd>
 #include "PairingFunction.h"
 #include "CuckooUnionFind.h"

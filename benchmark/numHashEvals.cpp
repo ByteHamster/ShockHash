@@ -1,14 +1,14 @@
 #include <iostream>
 #include <vector>
 #include <cmath>
-#include "../include/TinyBinaryCuckooHashTable.h"
-#include "../include/UnionFind.h"
+#include "shockhash/TinyBinaryCuckooHashTable.h"
+#include "shockhash/UnionFind.h"
 #include <bytehamster/util/XorShift64.h>
 #include <chrono>
 #include <set>
 #include <unordered_set>
-#include <ShockHash2-precompiled.h>
-#include <PairingFunction.h>
+#include "shockhash/ShockHash2-precompiled.h"
+#include "shockhash/PairingFunction.h"
 
 static constexpr uint64_t rotate(size_t l, uint64_t val, uint32_t x) {
     return ((val << x) | (val >> (l - x))) & ((1ul << l) - 1);

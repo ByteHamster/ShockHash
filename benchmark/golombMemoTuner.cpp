@@ -1,7 +1,7 @@
 #include <vector>
 #include <iostream>
 #include <bytehamster/util/XorShift64.h>
-#include "ShockHash2-internal.h"
+#include "shockhash/ShockHash2-internal.h"
 
 template <template<size_t> class T, size_t leafSize>
 void dispatchLeafSize() {

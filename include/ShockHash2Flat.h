@@ -6,10 +6,10 @@
 #include <bytehamster/util/EliasFano.h>
 #include <bytehamster/util/MurmurHash64.h>
 #include <tlx/math/integer_log2.hpp>
-#include <ShockHash2-internal.h>
-#include <ShockHash2.h>
 #include <sdsl/int_vector.hpp>
-#include "ShockHash2FlatBase.h"
+#include "ShockHash2.h"
+#include "shockhash/ShockHash2-internal.h"
+#include "shockhash/ShockHash2FlatBase.h"
 
 namespace shockhash {
 

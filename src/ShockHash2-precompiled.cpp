@@ -1,5 +1,5 @@
-#include "ShockHash2-precompiled.h"
-#include "ShockHash2-internal.h"
+#include "shockhash/ShockHash2-precompiled.h"
+#include "shockhash/ShockHash2-internal.h"
 
 namespace shockhash {
 
