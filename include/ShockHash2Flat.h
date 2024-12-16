@@ -134,11 +134,13 @@ class ShockHash2Flat {
                     freePositions.push_back(nbuckets + i);
                 }
             }
-            freePositionsBv.resize(freePositions.size() + freePositions.back() + 1, false);
-            for (size_t i = 0; i < freePositions.size(); i++) {
-                freePositionsBv[i + freePositions.at(i)] = true;
+            if (!freePositions.empty()) {
+                freePositionsBv.resize(freePositions.size() + freePositions.back() + 1, false);
+                for (size_t i = 0; i < freePositions.size(); i++) {
+                    freePositionsBv[i + freePositions.at(i)] = true;
+                }
+                freePositionsRankSelect = new pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES>(freePositionsBv);
             }
-            freePositionsRankSelect = new pasta::FlatRankSelect<pasta::OptimizedFor::ONE_QUERIES>(freePositionsBv);
 
             // Construct ShockHash within buckets
             std::vector<std::vector<uint64_t>> bucketContents(nbuckets);
@@ -226,7 +228,8 @@ class ShockHash2Flat {
         [[nodiscard]] size_t getBits() const {
             return 8 * sizeof(*this)
                     + fallbackPhf.getBits()
-                    + (freePositionsBv.size() + 8 * freePositionsRankSelect->space_usage())
+                    + freePositionsBv.size()
+                    + ((freePositionsRankSelect == nullptr) ? 0 : 8 * freePositionsRankSelect->space_usage())
                     + 8 * ribbon.sizeBytes()
                     + thresholdsAndSeeds.bit_size()
                     + 64 * seedsFallback.size();
@@ -236,7 +239,9 @@ class ShockHash2Flat {
             std::cout << "Thresholds: " << 1.0f*THRESHOLD_BITS/k << std::endl;
             std::cout << "Fallback PHF keys: " << freePositionsBv.size() - N/k << std::endl;
             std::cout << "PHF: " << 1.0f*fallbackPhf.getBits() / N << std::endl;
-            std::cout << "Fano: " << 1.0f*(freePositionsBv.size() + 8 * freePositionsRankSelect->space_usage()) / N << std::endl;
+            if (freePositionsBv.size() > 0) {
+                std::cout << "Fano: " << 1.0f*(freePositionsBv.size() + 8 * freePositionsRankSelect->space_usage()) / N << std::endl;
+            }
             std::cout << "Base case seeds: " << 1.0f*SEED_BITS/k << std::endl;
             std::cout << "Base case seeds overflow: " << 1.0f*seedsFallback.size()*64/N << std::endl;
             std::cout << "Ribbon: " << 8.0f*ribbon.sizeBytes() / N << std::endl;
