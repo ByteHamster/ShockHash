@@ -67,7 +67,7 @@ class ShockHash2Flat {
             N = keys.size();
             nbuckets = N / k;
             size_t keysInEndBucket = N - nbuckets * k;
-            size_t bucketsThisLayer = std::max(1ul, (size_t) std::ceil(OVERLOAD_FACTOR * nbuckets));
+            size_t bucketsThisLayer = (size_t) std::ceil(OVERLOAD_FACTOR * nbuckets);
             std::vector<size_t> freePositions;
             std::vector<KeyInfo> hashes;
             hashes.reserve(keys.size());
@@ -80,7 +80,10 @@ class ShockHash2Flat {
             std::vector<KeyInfo> allHashes = hashes;
             layerBases.push_back(0);
             thresholdsAndSeeds.bit_resize((THRESHOLD_BITS + SEED_BITS) * nbuckets);
-            for (size_t layer = 0; layer < 2; layer++) {
+            if (bucketsThisLayer == 0) {
+                layers = 0;
+            }
+            for (size_t layer = 0; layer < layers; layer++) {
                 size_t layerBase = layerBases.back();
                 if (layer != 0) {
                     bucketsThisLayer = OVERLOAD_FACTOR * (hashes.size() / k);
