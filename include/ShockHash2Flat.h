@@ -5,8 +5,8 @@
 #include <SimpleRibbon.h>
 #include <bytehamster/util/EliasFano.h>
 #include <bytehamster/util/MurmurHash64.h>
+#include <bytehamster/util/IntVector.h>
 #include <tlx/math/integer_log2.hpp>
-#include <sdsl/int_vector.hpp>
 #include "ShockHash2.h"
 #include "shockhash/ShockHash2-internal.h"
 #include "shockhash/ShockHash2FlatBase.h"
@@ -44,7 +44,7 @@ class ShockHash2Flat {
         static constexpr size_t SEED_BITS = std::ceil(0.442 * k - 0.2);
         static constexpr size_t MAX_SEED = 1ul << SEED_BITS;
         static constexpr size_t SEED_FALLBACK_INDICATOR = 0;
-        sdsl::int_vector<0> thresholdsAndSeeds;
+        bytehamster::util::IntVector<THRESHOLD_BITS + SEED_BITS> thresholdsAndSeeds;
         std::map<size_t, size_t> seedsFallback;
         std::vector<size_t> layerBases;
 
@@ -79,7 +79,7 @@ class ShockHash2Flat {
             }
             std::vector<KeyInfo> allHashes = hashes;
             layerBases.push_back(0);
-            thresholdsAndSeeds.bit_resize((THRESHOLD_BITS + SEED_BITS) * nbuckets);
+            thresholdsAndSeeds.resize(nbuckets);
             if (bucketsThisLayer == 0) {
                 layers = 0;
             }
@@ -171,16 +171,21 @@ class ShockHash2Flat {
         }
 
         inline void setThreshold(size_t bucket, size_t value) {
-            thresholdsAndSeeds.set_int(bucket * (THRESHOLD_BITS + SEED_BITS), value, THRESHOLD_BITS);
+            uint64_t thresholdAndSeed = thresholdsAndSeeds.at(bucket);
+            thresholdAndSeed &= ~((1ul << THRESHOLD_BITS) - 1);
+            thresholdAndSeed |= value;
+            thresholdsAndSeeds.set(bucket, thresholdAndSeed);
         }
 
         inline void setSeed(size_t bucket, size_t value) {
-            thresholdsAndSeeds.set_int(bucket * (THRESHOLD_BITS + SEED_BITS) + THRESHOLD_BITS, value, SEED_BITS);
+            uint64_t thresholdAndSeed = thresholdsAndSeeds.at(bucket);
+            thresholdAndSeed &= ~(((1ul << SEED_BITS) - 1) << THRESHOLD_BITS);
+            thresholdAndSeed |= value << THRESHOLD_BITS;
+            thresholdsAndSeeds.set(bucket, thresholdAndSeed);
         }
 
         inline std::pair<size_t, size_t> getThresholdAndSeed(size_t bucket) const {
-            uint64_t thresholdAndSeed = thresholdsAndSeeds.get_int(
-                    bucket * (THRESHOLD_BITS + SEED_BITS), SEED_BITS + THRESHOLD_BITS);
+            uint64_t thresholdAndSeed = thresholdsAndSeeds.at(bucket);
             size_t seed = thresholdAndSeed >> THRESHOLD_BITS;
             size_t threshold = thresholdAndSeed & (THRESHOLD_RANGE - 1);
             return std::make_pair(threshold, seed);
@@ -234,7 +239,7 @@ class ShockHash2Flat {
                     + freePositionsBv.size()
                     + ((freePositionsRankSelect == nullptr) ? 0 : 8 * freePositionsRankSelect->space_usage())
                     + 8 * ribbon.sizeBytes()
-                    + thresholdsAndSeeds.bit_size()
+                    + 8 * thresholdsAndSeeds.dataSizeBytes()
                     + 64 * seedsFallback.size();
         }
 

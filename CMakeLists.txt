@@ -1,4 +1,4 @@
-cmake_minimum_required (VERSION 3.25)
+cmake_minimum_required (VERSION 3.25...4.0)
 project(ShockHash
     DESCRIPTION "Various basic data structures"
     HOMEPAGE_URL "https://github.com/ByteHamster/ShockHash"
@@ -33,14 +33,6 @@ if(NOT TARGET tlx)
     add_subdirectory(extlib/tlx SYSTEM EXCLUDE_FROM_ALL)
 endif()
 
-if(NOT TARGET sdsl)
-    add_subdirectory(extlib/sdsl-lite/external SYSTEM EXCLUDE_FROM_ALL)
-    add_subdirectory(extlib/sdsl-lite/include SYSTEM EXCLUDE_FROM_ALL)
-    add_subdirectory(extlib/sdsl-lite/lib SYSTEM EXCLUDE_FROM_ALL)
-    target_compile_options(sdsl PRIVATE -w)
-    target_include_directories(sdsl SYSTEM INTERFACE extlib/sdsl-lite/include)
-endif()
-
 if(NOT TARGET simpleRibbon)
     set(IPS2RA_DISABLE_PARALLEL ON CACHE PATH "ips2ra's FindTBB greps a file that does not exist in recent TBB versions")
     add_subdirectory(extlib/simpleRibbon SYSTEM EXCLUDE_FROM_ALL)
@@ -72,7 +64,7 @@ target_compile_options(ShockHash2Precompiled PRIVATE $<$<COMPILE_LANGUAGE:CXX>:-
 add_library(ShockHash INTERFACE)
 target_include_directories(ShockHash INTERFACE include)
 target_compile_features(ShockHash INTERFACE cxx_std_20)
-target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter ByteHamsterUtil ShockHash2Precompiled sdsl)
+target_link_libraries(ShockHash INTERFACE Sux SimpleRibbon Ips2raShockHashSorter ByteHamsterUtil ShockHash2Precompiled)
 
 include(${CMAKE_CURRENT_SOURCE_DIR}/extlib/cmake-findsse/FindSSE.cmake)
 FindSSE()
